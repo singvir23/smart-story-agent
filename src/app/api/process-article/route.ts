@@ -28,11 +28,14 @@ interface FactSection {
 interface StoryData {
     title: string;
     source: string;
+    author?: string | null; // Author field (optional)
     date: string;
     summary: string;
     highlights: string[];
     factSections: FactSection[];
-    imageUrl?: string | null; // Include optional imageUrl
+    imageUrl?: string | null; // Primary og:image
+    imageUrls?: string[]; // List of additional image URLs
+    originalUrl: string; // Original URL for frontend button
 }
 
 // Helper to generate simple IDs
@@ -70,17 +73,19 @@ function cleanupJsonString(rawJson: string): string {
 // POST function
 export async function POST(req: Request) {
     let anthropicClient;
+    let originalUrl = ''; // Store the original URL to return to frontend
+
     try {
         // Initialize client here to catch API key error early
         anthropicClient = getAnthropicClient();
 
         const body = await req.json();
         const { articleUrl } = body;
+        originalUrl = articleUrl; // Store it
 
         if (!articleUrl || typeof articleUrl !== 'string') {
             return NextResponse.json({ error: 'Article URL is required' }, { status: 400 });
         }
-        // FIX 1: Remove unused variable from catch
         try { new URL(articleUrl); } catch {
             return NextResponse.json({ error: 'Invalid URL format provided' }, { status: 400 });
         }
@@ -91,8 +96,10 @@ export async function POST(req: Request) {
         let articleText = '';
         let inferredSource = '';
         let fetchedTitle = '';
-        let scrapedImageUrl: string | null = null;
+        let scrapedImageUrl: string | null = null; // Primary OG Image
         let scrapedDate: string | null = null;
+        let scrapedAuthor: string | null = null;
+        let additionalImageUrls: string[] = []; // Initialize additional images array
 
         try {
             const controller = new AbortController();
@@ -109,7 +116,10 @@ export async function POST(req: Request) {
 
             if (!response.ok) {
                 console.error(`Fetch failed for ${articleUrl} with status ${response.status} ${response.statusText}`);
-                throw new Error(`Failed to fetch article: ${response.status} ${response.statusText}`);
+                // Give a slightly more user-friendly hint for common issues
+                 if (response.status === 403) throw new Error(`Failed to fetch article: Access denied (403). The site may block automated requests.`);
+                 if (response.status === 404) throw new Error(`Failed to fetch article: Not Found (404). Check the URL.`);
+                 throw new Error(`Failed to fetch article: ${response.status} ${response.statusText}`);
             }
             const contentType = response.headers.get('content-type');
             if (!contentType || !contentType.includes('text/html')) {
@@ -119,50 +129,39 @@ export async function POST(req: Request) {
             const html = await response.text();
             const doc = new JSDOM(html, { url: articleUrl }); // Provide base URL to JSDOM
 
-            // --- Metadata Scraping (WITH IMPROVED IMAGE URL HANDLING) ---
+            // --- Metadata Scraping (Primary Image, Date, Author) ---
             try {
-                const imageTag = doc.window.document.querySelector('meta[property="og:image"]');
-                // FIX 2: Use const as potentialImageUrl is not reassigned
-                const potentialImageUrl = imageTag?.getAttribute('content') || null;
-
-                if (potentialImageUrl) {
-                    console.log(`DEBUG: Found og:image content: "${potentialImageUrl}"`);
-                    try {
-                        // Use URL constructor to validate and potentially resolve relative paths
-                        // The second argument (articleUrl) acts as the base if potentialImageUrl is relative
+                // --- Primary Image (og:image) ---
+                 const imageTag = doc.window.document.querySelector('meta[property="og:image"]');
+                 const potentialImageUrl = imageTag?.getAttribute('content') || null;
+                 if (potentialImageUrl) {
+                     try {
                         const absoluteUrl = new URL(potentialImageUrl, articleUrl).toString();
-
-                        // Basic check to ensure it's http or https after resolution
-                        const urlObj = new URL(absoluteUrl); // Parse the potentially resolved URL
+                        const urlObj = new URL(absoluteUrl);
                          if (['http:', 'https:'].includes(urlObj.protocol)) {
                              scrapedImageUrl = absoluteUrl;
-                             console.log(`DEBUG: Validated/Resolved image URL: ${scrapedImageUrl}`);
+                             console.log(`DEBUG: Validated/Resolved primary image URL: ${scrapedImageUrl}`);
                          } else {
                              console.warn(`DEBUG: Resolved URL "${absoluteUrl}" has non-http(s) protocol (${urlObj.protocol}). Discarding.`);
-                             scrapedImageUrl = null;
+                             scrapedImageUrl = null; // Set to null if invalid protocol
                          }
                     } catch (urlError: unknown) {
-                        // Handle cases where potentialImageUrl is not a valid URL fragment or absolute URL
                         console.warn(`DEBUG: Could not parse or resolve og:image content "${potentialImageUrl}" as a valid URL. Error:`, urlError instanceof Error ? urlError.message : urlError);
-                        scrapedImageUrl = null;
+                        scrapedImageUrl = null; // Set to null on error
                     }
-                } else {
-                    console.log(`DEBUG: No og:image meta tag found for ${articleUrl}.`);
-                    scrapedImageUrl = null;
-                }
+                 } else {
+                     console.log(`DEBUG: No og:image meta tag found for ${articleUrl}.`);
+                     scrapedImageUrl = null; // Explicitly null if not found
+                 }
 
-
-                // --- Date Scraping (Keep as before) ---
-                const dateTag = doc.window.document.querySelector('meta[property="article:published_time"]')
-                                || doc.window.document.querySelector('meta[name="date"]')
-                                || doc.window.document.querySelector('meta[name="pubdate"]')
-                                || doc.window.document.querySelector('meta[name="timestamp"]')
-                                || doc.window.document.querySelector('time[datetime]');
-
-                scrapedDate = dateTag?.getAttribute('content') || dateTag?.getAttribute('datetime') || null;
-                console.log(`DEBUG: Scraped date tag/attribute (raw): ${scrapedDate}`);
-
-                if (scrapedDate) {
+                // --- Date Scraping ---
+                 const dateTag = doc.window.document.querySelector('meta[property="article:published_time"]')
+                                 || doc.window.document.querySelector('meta[name="date"]')
+                                 || doc.window.document.querySelector('meta[name="pubdate"]')
+                                 || doc.window.document.querySelector('meta[name="timestamp"]')
+                                 || doc.window.document.querySelector('time[datetime]');
+                 scrapedDate = dateTag?.getAttribute('content') || dateTag?.getAttribute('datetime') || null;
+                  if (scrapedDate) {
                     try {
                          const parsed = new Date(scrapedDate);
                          if (!isNaN(parsed.getTime())) {
@@ -175,15 +174,35 @@ export async function POST(req: Request) {
                         console.warn(`DEBUG: Error during date parsing/formatting for "${scrapedDate}":`, dateError);
                     }
                 }
+
+                // --- Author Scraping ---
+                const authorTag = doc.window.document.querySelector('meta[name="author"]')
+                                || doc.window.document.querySelector('meta[property="article:author"]')
+                                || doc.window.document.querySelector('meta[name="article:author"]')
+                                || doc.window.document.querySelector('meta[property="book:author"]');
+
+                 scrapedAuthor = authorTag?.getAttribute('content') || null;
+                 if (scrapedAuthor) {
+                    scrapedAuthor = scrapedAuthor.trim();
+                    if (scrapedAuthor.toLowerCase().startsWith('by ')) {
+                         scrapedAuthor = scrapedAuthor.substring(3).trim();
+                     }
+                    console.log(`DEBUG: Scraped author from meta tag: ${scrapedAuthor}`);
+                 } else {
+                    console.log(`DEBUG: No standard author meta tag found for ${articleUrl}.`);
+                 }
+
             } catch (metaError: unknown) {
                 console.error("DEBUG: Error scraping meta tags:", metaError);
-                // Ensure image url is nullified if there was an error during scraping block
-                scrapedImageUrl = null;
+                 scrapedImageUrl = null; // Ensure null on error
+                 scrapedAuthor = null; // Ensure null on error
+                 scrapedDate = null; // Ensure null on error
             }
             // --- End Metadata Scraping ---
 
             // --- Readability ---
-            const reader = new Readability(doc.window.document);
+            // Use cloneNode to avoid modifying the original DOM used for meta scraping
+            const reader = new Readability(doc.window.document.cloneNode(true) as Document);
             const article = reader.parse();
 
             if (!article || !article.textContent || article.textContent.trim().length < 150) {
@@ -193,6 +212,7 @@ export async function POST(req: Request) {
                      articleText = bodyText;
                      fetchedTitle = doc.window.document.title || 'Title not found';
                      inferredSource = new URL(articleUrl).hostname;
+                     // No additional images if Readability fails/fallback used
                  } else {
                     console.error(`Could not extract meaningful content for ${articleUrl} using Readability or body fallback.`);
                     throw new Error('Could not extract sufficient article content.');
@@ -201,19 +221,79 @@ export async function POST(req: Request) {
                 articleText = article.textContent.trim();
                 fetchedTitle = article.title || doc.window.document.title || 'Title not found';
                 inferredSource = article.siteName || new URL(articleUrl).hostname;
+                // Use Readability's author if scraper didn't find one and Readability did
+                if (!scrapedAuthor && article.byline) {
+                    scrapedAuthor = article.byline.replace(/^by\s+/i, '').trim(); // Clean up 'By ' prefix
+                    console.log(`DEBUG: Using author from Readability byline: ${scrapedAuthor}`);
+                }
                 console.log(`Successfully extracted ~${articleText.length} characters via Readability.`);
+
+                // --- Extract Images from Readability Content ---
+                if (article.content) {
+                    try {
+                        // Parse the HTML content extracted by Readability
+                        const contentDom = new JSDOM(`<body>${article.content}</body>`, { url: articleUrl }); // Wrap in body and provide base URL
+                        const imagesInContent = contentDom.window.document.querySelectorAll('img');
+                        const seenUrls = new Set<string>(); // To avoid duplicates
+                        if (scrapedImageUrl) {
+                            seenUrls.add(scrapedImageUrl); // Don't add the main image again if found in content
+                        }
+
+                        console.log(`DEBUG: Found ${imagesInContent.length} <img> tags within Readability content.`);
+
+                        imagesInContent.forEach(img => {
+                            const src = img.getAttribute('src');
+                            const width = parseInt(img.getAttribute('width') || '0');
+                            const height = parseInt(img.getAttribute('height') || '0');
+
+                            if (src) {
+                                try {
+                                    // Resolve relative URLs against the article's base URL
+                                    const absoluteSrc = new URL(src, articleUrl).toString();
+                                    const urlObj = new URL(absoluteSrc); // Validate protocol
+
+                                    // Basic Filtering:
+                                    // 1. Must be HTTP/HTTPS
+                                    // 2. Not already seen
+                                    // 3. Avoid very small images (likely icons/spacers) - adjust threshold if needed
+                                    const MIN_DIMENSION = 50; // Pixels - minimum width or height
+                                    const isLikelyContent = (width === 0 && height === 0) || width >= MIN_DIMENSION || height >= MIN_DIMENSION;
+
+                                    if (['http:', 'https:'].includes(urlObj.protocol) && !seenUrls.has(absoluteSrc) && isLikelyContent) {
+                                         additionalImageUrls.push(absoluteSrc);
+                                         seenUrls.add(absoluteSrc);
+                                    }
+                                } catch (urlError) {
+                                    console.warn(`DEBUG: Could not parse or resolve image src "${src}" within content. Error:`, urlError instanceof Error ? urlError.message : urlError);
+                                }
+                            }
+                        });
+                         // Limit the number of additional images
+                         const MAX_ADDITIONAL_IMAGES = 10;
+                         if (additionalImageUrls.length > MAX_ADDITIONAL_IMAGES) {
+                             additionalImageUrls = additionalImageUrls.slice(0, MAX_ADDITIONAL_IMAGES);
+                             console.log(`DEBUG: Limited additional images to ${MAX_ADDITIONAL_IMAGES}.`);
+                         }
+                         console.log(`DEBUG: Added ${additionalImageUrls.length} valid additional image URLs.`);
+
+                    } catch(contentParseError) {
+                        console.error("DEBUG: Error parsing Readability article.content HTML:", contentParseError);
+                    }
+                }
+                // --- END: Extract Images ---
             }
-             console.log(`DEBUG: Using Title='${fetchedTitle}', Source='${inferredSource}', ScrapedDate='${scrapedDate}', ScrapedImage='${scrapedImageUrl}'`);
+             console.log(`DEBUG: Using Title='${fetchedTitle}', Source='${inferredSource}', Author='${scrapedAuthor || 'N/A'}', Date='${scrapedDate || 'N/A'}', PrimaryImage='${scrapedImageUrl || 'N/A'}', AdditionalImages=${additionalImageUrls.length}`);
 
         } catch (fetchError: unknown) {
             console.error(`Error fetching or parsing article (${articleUrl}):`, fetchError);
             let message = 'An unknown fetch/parse error occurred.';
             if(fetchError instanceof Error) {
-                message = `Failed to fetch or parse article: ${fetchError.message}`;
+                message = fetchError.message; // Use the specific error message
                 if (fetchError.name === 'AbortError') {
-                   return NextResponse.json({ error: 'Failed to fetch article: The request timed out.' }, { status: 504 });
+                   return NextResponse.json({ error: 'Failed to fetch article: The request timed out.' }, { status: 504 }); // Gateway Timeout
                 }
             }
+             // Pass the specific error message to the frontend
             return NextResponse.json({ error: message }, { status: 500 });
         }
 
@@ -225,12 +305,14 @@ export async function POST(req: Request) {
         // --- Step 2: Prepare Prompt for Claude ---
         const maxChars = 150000;
         const truncatedArticleText = articleText.length > maxChars ? articleText.substring(0, maxChars) + "\n[... content truncated ...]" : articleText;
+        // NOTE: We are NOT asking Claude for the author or images, relying on scraping.
         const prompt = `Analyze the following article text and provide a structured summary IN VALID JSON format ONLY.
 
 Context:
 Article Source (if known): ${inferredSource}
 Article Title (if known): ${fetchedTitle}
 Article Date (if scraped): ${scrapedDate || 'Not found by scraper'}
+Article Author (if scraped): ${scrapedAuthor || 'Not found by scraper'}
 
 --- ARTICLE TEXT START ---
 ${truncatedArticleText}
@@ -273,11 +355,11 @@ Critical JSON Rules & Escaping Guide:
         // --- Step 3: Call Claude API ---
         console.log(`Sending request to Claude API for ${articleUrl}. Prompt length: ~${prompt.length} chars`);
         const claudeResponse = await anthropicClient.messages.create({
-            model: "claude-3-haiku-20240307",
-            max_tokens: 3500,
+            model: "claude-3-haiku-20240307", // Or consider Opus/Sonnet for potentially better JSON adherence
+            max_tokens: 3500, // Adjust as needed
             system: "You are an expert data extraction tool. Your sole purpose is to return valid, correctly formatted JSON based precisely on the user's instructions and the provided text. You output ONLY the JSON object requested, nothing else. Ensure all special characters within JSON string values are properly escaped according to JSON specification.",
             messages: [{ role: 'user', content: prompt }],
-            temperature: 0.1,
+            temperature: 0.1, // Low temperature for deterministic output
         });
         console.log(`Received response from Claude API for ${articleUrl}. Output tokens: ${claudeResponse.usage.output_tokens}`);
 
@@ -323,20 +405,24 @@ Critical JSON Rules & Escaping Guide:
             let errorMessage = 'Failed to process the analysis service response (JSON parse error).';
              if (parseError instanceof Error) {
                 errorMessage = parseError.message.includes('position')
-                   ? parseError.message
+                   ? parseError.message // Keep detailed JSON position errors
                    : `Failed to process the analysis service response (JSON parse error): ${parseError.message}`;
             }
-            throw new Error(errorMessage);
+             // Give specific message for JSON parsing failure
+            throw new Error(`Analysis service response was not valid JSON. ${errorMessage}`);
         }
 
         // --- Step 5: Format data for Frontend ---
         const storyData: StoryData = {
             title: parsedData.title || fetchedTitle,
             source: parsedData.source || inferredSource,
+            author: scrapedAuthor, // Author from scraping
             date: parsedData.date, // Use date parsed/formatted by Claude or scraped
             summary: parsedData.summary,
             highlights: Array.isArray(parsedData.highlights) ? parsedData.highlights : [],
-            imageUrl: scrapedImageUrl, // Use the potentially resolved scrapedImageUrl
+            imageUrl: scrapedImageUrl, // Primary image
+            imageUrls: additionalImageUrls, // List of additional images
+            originalUrl: originalUrl, // Original URL
             factSections: Array.isArray(parsedData.factSections)
                 ? parsedData.factSections.map(section => ({
                     ...section,
@@ -345,7 +431,7 @@ Critical JSON Rules & Escaping Guide:
                 : [],
         };
 
-        console.log(`DEBUG: Final storyData (dynamic sections) for ${articleUrl}: Title='${storyData.title}', Date='${storyData.date}', Image='${storyData.imageUrl}', Highlights=${storyData.highlights.length}, Sections=${storyData.factSections.length}`);
+        console.log(`DEBUG: Final storyData: Title='${storyData.title}', Author='${storyData.author || 'N/A'}', Date='${storyData.date || 'N/A'}', PrimaryImage='${storyData.imageUrl || 'N/A'}', AdditionalImages=${storyData.imageUrls?.length ?? 0}, Sections=${storyData.factSections.length}`);
         if (storyData.factSections.length > 0) {
             console.log(`DEBUG: Generated Section Titles: ${storyData.factSections.map(s => s.title).join('; ')}`);
         }
@@ -355,17 +441,17 @@ Critical JSON Rules & Escaping Guide:
         return NextResponse.json(storyData, { status: 200 });
 
     } catch (error: unknown) {
-        console.error(`Critical Error in POST /api/process-article for URL ${req?.url || 'unknown'}:`, error);
+        console.error(`Critical Error in POST /api/process-article for URL ${originalUrl || 'unknown'}:`, error);
         let message = 'An internal server error occurred.';
         if (error instanceof Error) {
-             message = error.message;
+             message = error.message; // Use the specific error message from throw
         }
+         // Pass the specific error message back
         return NextResponse.json({ error: message }, { status: 500 });
     }
 }
 
 // --- GET Handler ---
-// FIX 3 (Revised): Add eslint disable comment for the unused parameter
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export async function GET(_req: Request) {
     try {
