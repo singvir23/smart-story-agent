@@ -80,7 +80,8 @@ export async function POST(req: Request) {
         if (!articleUrl || typeof articleUrl !== 'string') {
             return NextResponse.json({ error: 'Article URL is required' }, { status: 400 });
         }
-        try { new URL(articleUrl); } catch (_) {
+        // FIX 1: Remove unused '_' variable from catch
+        try { new URL(articleUrl); } catch {
             return NextResponse.json({ error: 'Invalid URL format provided' }, { status: 400 });
         }
 
@@ -121,7 +122,8 @@ export async function POST(req: Request) {
             // --- Metadata Scraping (WITH IMPROVED IMAGE URL HANDLING) ---
             try {
                 const imageTag = doc.window.document.querySelector('meta[property="og:image"]');
-                let potentialImageUrl = imageTag?.getAttribute('content') || null;
+                // FIX 2: Use const as potentialImageUrl is not reassigned
+                const potentialImageUrl = imageTag?.getAttribute('content') || null;
 
                 if (potentialImageUrl) {
                     console.log(`DEBUG: Found og:image content: "${potentialImageUrl}"`);
@@ -363,7 +365,8 @@ Critical JSON Rules & Escaping Guide:
 }
 
 // --- GET Handler ---
-export async function GET(req: Request) {
+// FIX 3: Prefix unused 'req' parameter with '_'
+export async function GET(_req: Request) {
     try {
         getAnthropicClient();
          return NextResponse.json({ message: "API route active. API key seems configured. Use POST to process an article." });
