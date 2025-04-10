@@ -476,7 +476,7 @@ const SmartStorySuite: React.FC = () => {
                  <motion.nav className="lg:col-span-3" variants={containerVariants} initial="hidden" animate="visible">
                       <div className="sticky top-6">
                          <h2 className={`text-xs font-semibold mb-3 uppercase tracking-wider ${isDarkMode ? 'text-teal-400' : 'text-teal-600'}`}>
-                            Add these sections below the summary
+                            Explore Sections
                          </h2>
                          <div className="flex flex-col space-y-1.5">
                           {(storyData.factSections ?? []).map((section: FactSection) => (
@@ -638,7 +638,7 @@ const SmartStorySuite: React.FC = () => {
 
               {/* Footer */}
               <footer className={`p-4 text-center text-xs ${isDarkMode ? 'bg-slate-900 text-slate-500 border-t border-slate-700' : 'bg-gray-50 text-gray-500 border-t border-gray-200'}`}>
-                Smart Story Suite - Powered by Anthropic Claude
+                Smart Story Suite
               </footer>
             </motion.div>
          )}
