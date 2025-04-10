@@ -56,45 +56,13 @@ function getAnthropicClient() {
     return new Anthropic({ apiKey });
 }
 
-// NEW: JSON Cleanup Function
+// JSON Cleanup Function
 function cleanupJsonString(rawJson: string): string {
     let cleaned = rawJson;
 
-    // 1. Attempt to fix invalid escapes like \' (replace with just ')
-    // JSON spec doesn't escape single quotes within double-quoted strings.
-    try {
-        // Use a loop to handle multiple occurrences potentially created by other replaces
-        while (/\\\'/.test(cleaned)) {
-            cleaned = cleaned.replace(/\\'/g, "'");
-        }
-    } catch (e) { console.error("Error during \\' cleanup:", e); }
-
-    // 2. Attempt to fix lone backslashes followed by whitespace (replace with just whitespace)
-    // This is heuristic - might be imperfect.
-    try {
-        // Matches a backslash NOT preceded by another backslash, and followed by whitespace [\s includes newline, tab etc]
-        // Replace with just the whitespace character found
-        cleaned = cleaned.replace(/(?<!\\)\\(\s)/g, '$1');
-    } catch (e) { console.error("Error during \\s cleanup:", e); }
-
-
-    // 3. More Aggressive (Use with caution - disabled by default): Remove backslash if followed by a character
-    //    that is NOT a valid JSON escape sequence character (\, ", /, b, f, n, r, t, u)
-    //    This might remove legitimate backslashes if they were meant to be literal but
-    //    were not double-escaped by the LLM. Only enable if simpler fixes fail.
-    /*
-    try {
-        // Matches a backslash NOT preceded by another backslash,
-        // followed by any character NOT in the valid escape set [\"\\/bfnrtu]
-        cleaned = cleaned.replace(/(?<!\\)\\([^"\\/bfnrtu])/g, '$1');
-    } catch (e) { console.error("Error during aggressive escape cleanup:", e); }
-    */
-
-    // Add more specific replacements here if console logs reveal other common patterns
-    // Example: If Claude sometimes outputs \_ instead of just _
-    // try { cleaned = cleaned.replace(/\\_/g, "_"); } catch (e) { console.error("Error during \\_ cleanup:", e); }
-
-
+    try { while (/\\\'/.test(cleaned)) { cleaned = cleaned.replace(/\\'/g, "'"); } } catch (e) { console.error("Error during \\' cleanup:", e); }
+    try { cleaned = cleaned.replace(/(?<!\\)\\(\s)/g, '$1'); } catch (e) { console.error("Error during \\s cleanup:", e); }
+    // Add more specific replacements here based on future error logs if needed
     return cleaned;
 }
 
@@ -145,24 +113,44 @@ export async function POST(req: Request) {
             const contentType = response.headers.get('content-type');
             if (!contentType || !contentType.includes('text/html')) {
                 console.warn(`Content type for ${articleUrl} is not HTML (${contentType}). Attempting parse anyway.`);
-                // Allow proceeding but log warning, Readability might handle some non-HTML cases or fail gracefully
-                // throw new Error(`Expected HTML content, but received ${contentType}`); // Make it non-fatal
             }
 
             const html = await response.text();
-            const doc = new JSDOM(html, { url: articleUrl });
+            const doc = new JSDOM(html, { url: articleUrl }); // Provide base URL to JSDOM
 
-            // --- Metadata Scraping ---
+            // --- Metadata Scraping (WITH IMPROVED IMAGE URL HANDLING) ---
             try {
                 const imageTag = doc.window.document.querySelector('meta[property="og:image"]');
-                scrapedImageUrl = imageTag?.getAttribute('content') || null;
-                if (scrapedImageUrl && !scrapedImageUrl.toLowerCase().startsWith('http')) {
-                     console.warn(`DEBUG: Scraped og:image "${scrapedImageUrl}" doesn't look like a valid URL. Discarding.`);
-                     scrapedImageUrl = null;
-                } else if (scrapedImageUrl) {
-                    console.log(`DEBUG: Scraped og:image meta tag: ${scrapedImageUrl}`);
+                let potentialImageUrl = imageTag?.getAttribute('content') || null;
+
+                if (potentialImageUrl) {
+                    console.log(`DEBUG: Found og:image content: "${potentialImageUrl}"`);
+                    try {
+                        // Use URL constructor to validate and potentially resolve relative paths
+                        // The second argument (articleUrl) acts as the base if potentialImageUrl is relative
+                        const absoluteUrl = new URL(potentialImageUrl, articleUrl).toString();
+
+                        // Basic check to ensure it's http or https after resolution
+                        const urlObj = new URL(absoluteUrl); // Parse the potentially resolved URL
+                         if (['http:', 'https:'].includes(urlObj.protocol)) {
+                             scrapedImageUrl = absoluteUrl;
+                             console.log(`DEBUG: Validated/Resolved image URL: ${scrapedImageUrl}`);
+                         } else {
+                             console.warn(`DEBUG: Resolved URL "${absoluteUrl}" has non-http(s) protocol (${urlObj.protocol}). Discarding.`);
+                             scrapedImageUrl = null;
+                         }
+                    } catch (urlError: unknown) {
+                        // Handle cases where potentialImageUrl is not a valid URL fragment or absolute URL
+                        console.warn(`DEBUG: Could not parse or resolve og:image content "${potentialImageUrl}" as a valid URL. Error:`, urlError instanceof Error ? urlError.message : urlError);
+                        scrapedImageUrl = null;
+                    }
+                } else {
+                    console.log(`DEBUG: No og:image meta tag found for ${articleUrl}.`);
+                    scrapedImageUrl = null;
                 }
 
+
+                // --- Date Scraping (Keep as before) ---
                 const dateTag = doc.window.document.querySelector('meta[property="article:published_time"]')
                                 || doc.window.document.querySelector('meta[name="date"]')
                                 || doc.window.document.querySelector('meta[name="pubdate"]')
@@ -181,12 +169,14 @@ export async function POST(req: Request) {
                          } else {
                             console.warn(`DEBUG: Could not parse scraped date "${scrapedDate}" into valid Date object. Keeping raw.`);
                          }
-                    } catch (dateError) {
+                    } catch (dateError: unknown) {
                         console.warn(`DEBUG: Error during date parsing/formatting for "${scrapedDate}":`, dateError);
                     }
                 }
-            } catch (metaError) {
+            } catch (metaError: unknown) {
                 console.error("DEBUG: Error scraping meta tags:", metaError);
+                // Ensure image url is nullified if there was an error during scraping block
+                scrapedImageUrl = null;
             }
             // --- End Metadata Scraping ---
 
@@ -213,12 +203,16 @@ export async function POST(req: Request) {
             }
              console.log(`DEBUG: Using Title='${fetchedTitle}', Source='${inferredSource}', ScrapedDate='${scrapedDate}', ScrapedImage='${scrapedImageUrl}'`);
 
-        } catch (fetchError: any) {
+        } catch (fetchError: unknown) {
             console.error(`Error fetching or parsing article (${articleUrl}):`, fetchError);
-             if (fetchError.name === 'AbortError') {
-                return NextResponse.json({ error: 'Failed to fetch article: The request timed out.' }, { status: 504 });
-             }
-            return NextResponse.json({ error: `Failed to fetch or parse article: ${fetchError.message}` }, { status: 500 });
+            let message = 'An unknown fetch/parse error occurred.';
+            if(fetchError instanceof Error) {
+                message = `Failed to fetch or parse article: ${fetchError.message}`;
+                if (fetchError.name === 'AbortError') {
+                   return NextResponse.json({ error: 'Failed to fetch article: The request timed out.' }, { status: 504 });
+                }
+            }
+            return NextResponse.json({ error: message }, { status: 500 });
         }
 
         if (articleText.length < 150) {
@@ -226,11 +220,9 @@ export async function POST(req: Request) {
         }
 
 
-        // --- Step 2: Prepare *FINAL REVISED* Prompt for Claude (MOST Explicit JSON rules) ---
+        // --- Step 2: Prepare Prompt for Claude ---
         const maxChars = 150000;
         const truncatedArticleText = articleText.length > maxChars ? articleText.substring(0, maxChars) + "\n[... content truncated ...]" : articleText;
-
-        // --- ** THE FINAL REVISED PROMPT ** ---
         const prompt = `Analyze the following article text and provide a structured summary IN VALID JSON format ONLY.
 
 Context:
@@ -276,64 +268,62 @@ Critical JSON Rules & Escaping Guide:
 6.  **BASE ON TEXT ONLY:** Do not add external information. Follow instructions for missing data.`;
 
 
-        // --- Step 3: Call Claude API (Keep System Prompt, Low Temperature) ---
+        // --- Step 3: Call Claude API ---
         console.log(`Sending request to Claude API for ${articleUrl}. Prompt length: ~${prompt.length} chars`);
         const claudeResponse = await anthropicClient.messages.create({
             model: "claude-3-haiku-20240307",
-            max_tokens: 3500, // Increased slightly more just in case escaping adds length
-            // Add System Prompt
+            max_tokens: 3500,
             system: "You are an expert data extraction tool. Your sole purpose is to return valid, correctly formatted JSON based precisely on the user's instructions and the provided text. You output ONLY the JSON object requested, nothing else. Ensure all special characters within JSON string values are properly escaped according to JSON specification.",
             messages: [{ role: 'user', content: prompt }],
-            temperature: 0.1, // Keep temperature low
+            temperature: 0.1,
         });
         console.log(`Received response from Claude API for ${articleUrl}. Output tokens: ${claudeResponse.usage.output_tokens}`);
 
-        // --- Step 4: Parse Claude's Response (Add Cleanup Step) ---
+        // --- Step 4: Parse Claude's Response ---
         if (!claudeResponse.content || claudeResponse.content.length === 0 || claudeResponse.content[0].type !== 'text' || !claudeResponse.content[0].text) {
              console.error('Unexpected or empty response structure from Claude API:', JSON.stringify(claudeResponse));
              throw new Error('Received an unexpected or empty response from the analysis service.');
         }
-        const rawJsonString = claudeResponse.content[0].text.trim(); // Get raw string
+        const rawJsonString = claudeResponse.content[0].text.trim();
 
-        let extractedJson = rawJsonString; // Default to raw string initially
-        let cleanedJsonString = rawJsonString; // Variable for the cleaned string
+        let extractedJson = rawJsonString;
+        let cleanedJsonString = rawJsonString;
         let parsedData: ExpectedClaudeResponse;
 
         try {
-            // Attempt to extract JSON object boundaries first
             const jsonStart = rawJsonString.indexOf('{');
             const jsonEnd = rawJsonString.lastIndexOf('}');
 
             if (jsonStart === -1 || jsonEnd === -1 || jsonEnd < jsonStart) {
-                 console.error('Could not find valid JSON object delimiters { } in Claude response. Raw Response:', rawJsonString); // Log raw string on delimiter error
+                 console.error('Could not find valid JSON object delimiters { } in Claude response. Raw Response:', rawJsonString);
                 throw new Error('Analysis service response did not contain recognizable JSON object delimiters.');
             }
             extractedJson = rawJsonString.substring(jsonStart, jsonEnd + 1);
 
-            // ** APPLY CLEANUP FUNCTION **
             cleanedJsonString = cleanupJsonString(extractedJson);
             if (cleanedJsonString !== extractedJson) {
                 console.log("DEBUG: Applied cleanup transformations to JSON string.");
             }
 
-            // Attempt to parse the CLEANED JSON
             parsedData = JSON.parse(cleanedJsonString);
             console.log(`Successfully parsed Claude JSON response for ${articleUrl} (after cleanup).`);
 
-        } catch (parseError: any) {
+        } catch (parseError: unknown) {
             console.error(`Error parsing Claude JSON response for ${articleUrl}:`, parseError);
-            // ** CRITICAL DEBUGGING STEP **
             console.error('--- Raw Claude response string ---');
-            console.error(rawJsonString); // Log the ORIGINAL raw string from Claude
+            console.error(rawJsonString);
             console.error('--- Extracted JSON string (before cleanup) ---');
-            console.error(extractedJson); // Log the potentially extracted substring
+            console.error(extractedJson);
             console.error('--- Cleaned JSON string (attempted fix) ---');
-            console.error(cleanedJsonString); // Log the string AFTER cleanup attempts
+            console.error(cleanedJsonString);
             console.error('--- End Logs ---');
 
-            const errorMessage = parseError.message.includes('position')
-               ? parseError.message // Keep position info if available
-               : `Failed to process the analysis service response (JSON parse error): ${parseError.message}`;
+            let errorMessage = 'Failed to process the analysis service response (JSON parse error).';
+             if (parseError instanceof Error) {
+                errorMessage = parseError.message.includes('position')
+                   ? parseError.message
+                   : `Failed to process the analysis service response (JSON parse error): ${parseError.message}`;
+            }
             throw new Error(errorMessage);
         }
 
@@ -341,40 +331,47 @@ Critical JSON Rules & Escaping Guide:
         const storyData: StoryData = {
             title: parsedData.title || fetchedTitle,
             source: parsedData.source || inferredSource,
-            date: parsedData.date, // Use the date determined by Claude based on instructions
+            date: parsedData.date, // Use date parsed/formatted by Claude or scraped
             summary: parsedData.summary,
-            highlights: Array.isArray(parsedData.highlights) ? parsedData.highlights : [], // Ensure it's an array
-            imageUrl: scrapedImageUrl, // Use the image URL found by scraper
-            factSections: Array.isArray(parsedData.factSections) // Ensure it's an array
+            highlights: Array.isArray(parsedData.highlights) ? parsedData.highlights : [],
+            imageUrl: scrapedImageUrl, // Use the potentially resolved scrapedImageUrl
+            factSections: Array.isArray(parsedData.factSections)
                 ? parsedData.factSections.map(section => ({
                     ...section,
-                    id: generateId(section.title) // Generate ID based on the DYNAMIC title
+                    id: generateId(section.title)
                   }))
                 : [],
         };
 
         console.log(`DEBUG: Final storyData (dynamic sections) for ${articleUrl}: Title='${storyData.title}', Date='${storyData.date}', Image='${storyData.imageUrl}', Highlights=${storyData.highlights.length}, Sections=${storyData.factSections.length}`);
         if (storyData.factSections.length > 0) {
-            console.log(`DEBUG: Generated Section Titles: ${storyData.factSections.map(s => s.title).join('; ')}`); // Log titles
+            console.log(`DEBUG: Generated Section Titles: ${storyData.factSections.map(s => s.title).join('; ')}`);
         }
 
 
         // --- Step 6: Send Response to Frontend ---
         return NextResponse.json(storyData, { status: 200 });
 
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error(`Critical Error in POST /api/process-article for URL ${req?.url || 'unknown'}:`, error);
-        // Return the specific error message from getAnthropicClient or the caught error
-        return NextResponse.json({ error: error.message || 'An internal server error occurred.' }, { status: 500 });
+        let message = 'An internal server error occurred.';
+        if (error instanceof Error) {
+             message = error.message;
+        }
+        return NextResponse.json({ error: message }, { status: 500 });
     }
 }
 
-// GET handler
+// --- GET Handler ---
 export async function GET(req: Request) {
     try {
         getAnthropicClient();
          return NextResponse.json({ message: "API route active. API key seems configured. Use POST to process an article." });
-    } catch(error: any) {
-         return NextResponse.json({ message: `API route active, but config error: ${error.message}. Use POST to process an article.` }, { status: 500 });
+    } catch(error: unknown) {
+         let message = 'API route active, but encountered an error.';
+         if (error instanceof Error) {
+             message = `API route active, but config error: ${error.message}. Use POST to process an article.`;
+         }
+         return NextResponse.json({ message }, { status: 500 });
     }
 }
