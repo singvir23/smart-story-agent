@@ -80,7 +80,7 @@ export async function POST(req: Request) {
         if (!articleUrl || typeof articleUrl !== 'string') {
             return NextResponse.json({ error: 'Article URL is required' }, { status: 400 });
         }
-        // FIX 1: Remove unused '_' variable from catch
+        // FIX 1: Remove unused variable from catch
         try { new URL(articleUrl); } catch {
             return NextResponse.json({ error: 'Invalid URL format provided' }, { status: 400 });
         }
@@ -365,7 +365,8 @@ Critical JSON Rules & Escaping Guide:
 }
 
 // --- GET Handler ---
-// FIX 3: Prefix unused 'req' parameter with '_'
+// FIX 3 (Revised): Add eslint disable comment for the unused parameter
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export async function GET(_req: Request) {
     try {
         getAnthropicClient();
