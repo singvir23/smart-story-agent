@@ -3,9 +3,9 @@ import { NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { JSDOM } from 'jsdom';
 import { Readability } from '@mozilla/readability';
-import fetch from 'node-fetch';
+import fetch from 'node-fetch'; // Or use built-in fetch if your Node version supports it reliably
 
-// Define the structure we expect from Claude (matching frontend interfaces)
+// Define the structure Claude should return
 interface ExpectedClaudeResponse {
     title: string;
     source: string;
@@ -13,12 +13,12 @@ interface ExpectedClaudeResponse {
     summary: string;
     highlights: string[];
     factSections: Array<{
-        title: string;
+        title: string; // Titles will now be dynamic
         content: string;
     }>;
 }
 
-// Define interfaces used within this file and potentially shared with frontend
+// Define interfaces for data structure (shared with frontend is ideal)
 interface FactSection {
     id: string;
     title: string;
@@ -32,43 +32,87 @@ interface StoryData {
     summary: string;
     highlights: string[];
     factSections: FactSection[];
+    imageUrl?: string | null; // Include optional imageUrl
 }
 
 // Helper to generate simple IDs
 const generateId = (title: string): string => {
-    return title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+    // Generate ID based on the title Claude provided
+    return title.toLowerCase()
+        .replace(/\s+/g, '-') // Replace spaces with hyphens
+        .replace(/[^\w-]+/g, '') // Remove all non-word chars except hyphen
+        .replace(/--+/g, '-') // Replace multiple hyphens with single
+        .replace(/^-+/, '') // Trim hyphens from start
+        .replace(/-+$/, ''); // Trim hyphens from end
+};
+
+// API Key Check (Crucial for serverless functions where env might not be loaded on import)
+function getAnthropicClient() {
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
+        console.error("ANTHROPIC_API_KEY environment variable is not set.");
+        throw new Error("Server configuration error: API key missing."); // Throw error to stop processing
+    }
+    return new Anthropic({ apiKey });
 }
 
-// Ensure API key is loaded (add error handling if it's missing)
-if (!process.env.ANTHROPIC_API_KEY) {
-    console.error("ANTHROPIC_API_KEY environment variable is not set.");
-    // Optionally throw an error or handle it gracefully depending on your needs
-    // throw new Error("ANTHROPIC_API_KEY is not configured.");
-}
+// NEW: JSON Cleanup Function
+function cleanupJsonString(rawJson: string): string {
+    let cleaned = rawJson;
 
-const anthropiClient = new Anthropic({
-    apiKey: process.env.ANTHROPIC_API_KEY,
-});
-
-// Use standard Request object for App Router
-export async function POST(req: Request) {
+    // 1. Attempt to fix invalid escapes like \' (replace with just ')
+    // JSON spec doesn't escape single quotes within double-quoted strings.
     try {
-        if (!process.env.ANTHROPIC_API_KEY) {
-             return NextResponse.json({ error: 'Server configuration error: API key missing.' }, { status: 500 });
+        // Use a loop to handle multiple occurrences potentially created by other replaces
+        while (/\\\'/.test(cleaned)) {
+            cleaned = cleaned.replace(/\\'/g, "'");
         }
+    } catch (e) { console.error("Error during \\' cleanup:", e); }
 
-        const body = await req.json(); // Get body using await req.json()
+    // 2. Attempt to fix lone backslashes followed by whitespace (replace with just whitespace)
+    // This is heuristic - might be imperfect.
+    try {
+        // Matches a backslash NOT preceded by another backslash, and followed by whitespace [\s includes newline, tab etc]
+        // Replace with just the whitespace character found
+        cleaned = cleaned.replace(/(?<!\\)\\(\s)/g, '$1');
+    } catch (e) { console.error("Error during \\s cleanup:", e); }
+
+
+    // 3. More Aggressive (Use with caution - disabled by default): Remove backslash if followed by a character
+    //    that is NOT a valid JSON escape sequence character (\, ", /, b, f, n, r, t, u)
+    //    This might remove legitimate backslashes if they were meant to be literal but
+    //    were not double-escaped by the LLM. Only enable if simpler fixes fail.
+    /*
+    try {
+        // Matches a backslash NOT preceded by another backslash,
+        // followed by any character NOT in the valid escape set [\"\\/bfnrtu]
+        cleaned = cleaned.replace(/(?<!\\)\\([^"\\/bfnrtu])/g, '$1');
+    } catch (e) { console.error("Error during aggressive escape cleanup:", e); }
+    */
+
+    // Add more specific replacements here if console logs reveal other common patterns
+    // Example: If Claude sometimes outputs \_ instead of just _
+    // try { cleaned = cleaned.replace(/\\_/g, "_"); } catch (e) { console.error("Error during \\_ cleanup:", e); }
+
+
+    return cleaned;
+}
+
+
+// POST function
+export async function POST(req: Request) {
+    let anthropicClient;
+    try {
+        // Initialize client here to catch API key error early
+        anthropicClient = getAnthropicClient();
+
+        const body = await req.json();
         const { articleUrl } = body;
 
         if (!articleUrl || typeof articleUrl !== 'string') {
-            // Use NextResponse for responses
             return NextResponse.json({ error: 'Article URL is required' }, { status: 400 });
         }
-
-        // Basic URL validation (optional but recommended)
-        try {
-            new URL(articleUrl);
-        } catch (_) {
+        try { new URL(articleUrl); } catch (_) {
             return NextResponse.json({ error: 'Invalid URL format provided' }, { status: 400 });
         }
 
@@ -78,197 +122,259 @@ export async function POST(req: Request) {
         let articleText = '';
         let inferredSource = '';
         let fetchedTitle = '';
+        let scrapedImageUrl: string | null = null;
+        let scrapedDate: string | null = null;
 
         try {
-            // Add a timeout to the fetch request (e.g., 15 seconds)
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 15000);
+            const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
 
             const response = await fetch(articleUrl, {
                 headers: {
-                    'User-Agent': 'SmartStorySuiteBot/1.0 (+https://your-domain.com/bot-info)', // Be a good citizen
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8' // Common accept header
+                    'User-Agent': 'SmartStorySuiteBot/1.0 (+https://your-domain.com/bot-info)', // Replace with your info
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
                 },
-                signal: controller.signal // Add timeout signal
+                signal: controller.signal
             });
-
-            clearTimeout(timeoutId); // Clear the timeout if fetch completes
+            clearTimeout(timeoutId);
 
             if (!response.ok) {
-                 // Log more details on fetch failure
                 console.error(`Fetch failed for ${articleUrl} with status ${response.status} ${response.statusText}`);
                 throw new Error(`Failed to fetch article: ${response.status} ${response.statusText}`);
             }
-
-            // Check content type - only proceed if it looks like HTML
             const contentType = response.headers.get('content-type');
             if (!contentType || !contentType.includes('text/html')) {
-                console.warn(`Content type for ${articleUrl} is not HTML (${contentType}). Skipping Readability.`);
-                 throw new Error(`Expected HTML content, but received ${contentType}`);
+                console.warn(`Content type for ${articleUrl} is not HTML (${contentType}). Attempting parse anyway.`);
+                // Allow proceeding but log warning, Readability might handle some non-HTML cases or fail gracefully
+                // throw new Error(`Expected HTML content, but received ${contentType}`); // Make it non-fatal
             }
 
-
             const html = await response.text();
-            const doc = new JSDOM(html, { url: articleUrl }); // Provide URL for Readability context
+            const doc = new JSDOM(html, { url: articleUrl });
+
+            // --- Metadata Scraping ---
+            try {
+                const imageTag = doc.window.document.querySelector('meta[property="og:image"]');
+                scrapedImageUrl = imageTag?.getAttribute('content') || null;
+                if (scrapedImageUrl && !scrapedImageUrl.toLowerCase().startsWith('http')) {
+                     console.warn(`DEBUG: Scraped og:image "${scrapedImageUrl}" doesn't look like a valid URL. Discarding.`);
+                     scrapedImageUrl = null;
+                } else if (scrapedImageUrl) {
+                    console.log(`DEBUG: Scraped og:image meta tag: ${scrapedImageUrl}`);
+                }
+
+                const dateTag = doc.window.document.querySelector('meta[property="article:published_time"]')
+                                || doc.window.document.querySelector('meta[name="date"]')
+                                || doc.window.document.querySelector('meta[name="pubdate"]')
+                                || doc.window.document.querySelector('meta[name="timestamp"]')
+                                || doc.window.document.querySelector('time[datetime]');
+
+                scrapedDate = dateTag?.getAttribute('content') || dateTag?.getAttribute('datetime') || null;
+                console.log(`DEBUG: Scraped date tag/attribute (raw): ${scrapedDate}`);
+
+                if (scrapedDate) {
+                    try {
+                         const parsed = new Date(scrapedDate);
+                         if (!isNaN(parsed.getTime())) {
+                            scrapedDate = parsed.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+                            console.log(`DEBUG: Formatted scraped date: ${scrapedDate}`);
+                         } else {
+                            console.warn(`DEBUG: Could not parse scraped date "${scrapedDate}" into valid Date object. Keeping raw.`);
+                         }
+                    } catch (dateError) {
+                        console.warn(`DEBUG: Error during date parsing/formatting for "${scrapedDate}":`, dateError);
+                    }
+                }
+            } catch (metaError) {
+                console.error("DEBUG: Error scraping meta tags:", metaError);
+            }
+            // --- End Metadata Scraping ---
+
+            // --- Readability ---
             const reader = new Readability(doc.window.document);
             const article = reader.parse();
 
-            if (!article || !article.textContent) {
-                 // Try falling back to body text if Readability fails significantly
-                 const bodyText = doc.window.document.body.textContent?.trim();
-                 if (bodyText && bodyText.length > 200) {
-                     console.warn(`Readability failed for ${articleUrl}. Falling back to body text.`);
+            if (!article || !article.textContent || article.textContent.trim().length < 150) {
+                 const bodyText = doc.window.document.body?.textContent?.trim();
+                 if (bodyText && bodyText.length > 150) {
+                     console.warn(`Readability failed or content too short for ${articleUrl}. Falling back to body text.`);
                      articleText = bodyText;
                      fetchedTitle = doc.window.document.title || 'Title not found';
                      inferredSource = new URL(articleUrl).hostname;
                  } else {
                     console.error(`Could not extract meaningful content for ${articleUrl} using Readability or body fallback.`);
-                    throw new Error('Could not extract article content.');
+                    throw new Error('Could not extract sufficient article content.');
                  }
             } else {
                 articleText = article.textContent.trim();
-                fetchedTitle = article.title || doc.window.document.title; // Use Readability title or fallback
-                inferredSource = article.siteName || new URL(articleUrl).hostname; // Use Readability siteName or fallback
-                console.log(`Successfully extracted ~${articleText.length} characters via Readability. Title: ${fetchedTitle}, Source: ${inferredSource}`);
+                fetchedTitle = article.title || doc.window.document.title || 'Title not found';
+                inferredSource = article.siteName || new URL(articleUrl).hostname;
+                console.log(`Successfully extracted ~${articleText.length} characters via Readability.`);
             }
-
+             console.log(`DEBUG: Using Title='${fetchedTitle}', Source='${inferredSource}', ScrapedDate='${scrapedDate}', ScrapedImage='${scrapedImageUrl}'`);
 
         } catch (fetchError: any) {
             console.error(`Error fetching or parsing article (${articleUrl}):`, fetchError);
-             // Distinguish between fetch timeout and other errors
              if (fetchError.name === 'AbortError') {
-                return NextResponse.json({ error: 'Failed to fetch article: The request timed out.' }, { status: 504 }); // Gateway Timeout
+                return NextResponse.json({ error: 'Failed to fetch article: The request timed out.' }, { status: 504 });
              }
             return NextResponse.json({ error: `Failed to fetch or parse article: ${fetchError.message}` }, { status: 500 });
         }
 
-         // Increased minimum length slightly
-         if (articleText.length < 200) {
-            console.warn(`Extracted content for ${articleUrl} is very short (${articleText.length} chars). May result in poor analysis.`);
-            // Decide whether to proceed or return an error
-            // return NextResponse.json({ error: 'Extracted content seems too short to analyze meaningfully.' }, { status: 400 });
-         }
+        if (articleText.length < 150) {
+           console.warn(`Final extracted content for ${articleUrl} is very short (${articleText.length} chars). Analysis quality might be low.`);
+        }
 
-        // --- Step 2: Prepare Prompt for Claude ---
-        // Define the sections we want Claude to populate
-        const desiredSections = [
-            "Key Points",           // Core findings/arguments
-            "Context/Background",   // What led to this? Relevant history?
-            "Impact/Consequences", // What are the results or potential effects?
-            "Quotes/Sources",       // Notable quotes or cited sources/experts
-            "Data/Figures",         // Any specific numbers, stats, or figures mentioned
-            "Future Outlook",       // What might happen next? Predictions?
-            // Add/remove based on desired output focus
-        ];
 
-        // Truncate article text to fit context window limits reasonably
-        // Claude 3 Haiku context window is large (200k tokens), but let's be practical for cost/performance.
-        // ~4 chars per token is a rough estimate. Max ~150k chars = ~37.5k tokens.
+        // --- Step 2: Prepare *FINAL REVISED* Prompt for Claude (MOST Explicit JSON rules) ---
         const maxChars = 150000;
-        const truncatedArticleText = articleText.length > maxChars
-            ? articleText.substring(0, maxChars) + "\n[... content truncated ...]"
-            : articleText;
+        const truncatedArticleText = articleText.length > maxChars ? articleText.substring(0, maxChars) + "\n[... content truncated ...]" : articleText;
 
+        // --- ** THE FINAL REVISED PROMPT ** ---
+        const prompt = `Analyze the following article text and provide a structured summary IN VALID JSON format ONLY.
 
-        const prompt = `Analyze the following article text and provide a structured summary in JSON format.
-
+Context:
 Article Source (if known): ${inferredSource}
 Article Title (if known): ${fetchedTitle}
+Article Date (if scraped): ${scrapedDate || 'Not found by scraper'}
 
 --- ARTICLE TEXT START ---
 ${truncatedArticleText}
 --- ARTICLE TEXT END ---
 
-Based *only* on the text provided above, respond ONLY with a valid JSON object adhering strictly to the following structure:
+Your task is to act as a meticulous JSON generation service. Based *only* on the text provided above, respond ONLY with a single, valid JSON object adhering strictly to the structure below. DO NOT include any introductory text, explanations, apologies, markdown formatting (like \`\`\`json), or closing remarks before or after the JSON object.
+
+JSON Structure:
 {
   "title": "(string) The main title of the article. Infer from the text or use '${fetchedTitle}' if accurate.",
   "source": "(string) The source publication or website. Use '${inferredSource}' or refine based *only* on the text.",
-  "date": "(string) The publication date *explicitly mentioned* in the article (e.g., "April 9, 2025", "last Tuesday", "yesterday"). If no date is explicitly mentioned, use the string "Date not specified in text". Do not guess.",
+  "date": "(string) The publication date *explicitly mentioned* in the article text (e.g., "April 9, 2025", "last Tuesday"). If found, use that formatted as 'Month Day, Year'. If not explicitly mentioned in the text but a date was scraped ('${scrapedDate || 'None'}'), use the scraped date string provided. Otherwise, use the string 'Date not specified'.",
   "summary": "(string) A concise, neutral summary of the article's main points (2-4 sentences maximum).",
-  "highlights": "(array of strings) A list of 3-5 key, distinct takeaways or factual highlights directly supported by the article text.",
-  "factSections": "(array of objects) Create an object for each of the following section titles *if and only if* relevant information is present in the article text. If no relevant information is found for a title, *omit* that section object entirely from this array. Do not invent information. Each object must have:
-      - "title": (string) Exactly one of the following: ${desiredSections.join(', ')}
-      - "content": (string) A summary of the information *directly found* in the text relevant to this specific section title. Be concise. If the section title is 'Quotes/Sources', list 1-3 notable direct quotes or explicitly mentioned sources/experts."
+  "highlights": "(array of strings) Exactly 4 key, distinct takeaways or factual highlights directly supported by the article text. If 4 distinct highlights cannot be found, provide as many as possible up to 4. Each highlight should be a concise sentence.",
+  "factSections": "(array of objects) <<< IMPORTANT: Generate this dynamically based on content. >>>
+      1. Identify 3 to 5 distinct, significant sub-topics, themes, or key aspects discussed within the article text.
+      2. For each identified sub-topic, create an object in this array.
+      3. Each object MUST have:
+         - "title": "(string) A concise, descriptive title for the specific sub-topic identified (e.g., "Rose Development Details", "Market Availability and Pricing", "Stewart's Involvement", "Scent Profile Comparison"). Titles should be specific to the article's content, NOT generic like "Introduction", "Key Points", "Conclusion", "Background".
+         - "content": "(string) Summary (1-3 sentences) relevant ONLY to this section title. <<< CRITICAL: Ensure this string value is valid JSON. Escape ALL necessary characters: double quotes must be \\", backslashes must be \\\\, newlines must be \\n, etc. Do NOT escape single quotes ('). >>>"
+      4. If fewer than 3 distinct, significant sub-topics can be reasonably identified from the text, provide only those that are found. Do not force sections or invent information. Omit this entire 'factSections' array only if the article is extremely short or lacks any distinct sub-topics."
 }
 
-Example for 'factSections':
-[
-  { "title": "Key Points", "content": "The agreement sets binding targets..." },
-  { "title": "Impact/Consequences", "content": "Experts predict a 1.8°C limit if implemented..." },
-  { "title": "Quotes/Sources", "content": "Activist Jane Doe called it 'a step forward'. Dr. Smith from Climate Institute mentioned..." }
-]
+Critical JSON Rules & Escaping Guide:
+1.  **OUTPUT JSON ONLY:** Start with '{', end with '}', nothing else.
+2.  **VALID SYNTAX:** Use double quotes for all keys and string values. Ensure correct commas (no trailing commas). Match brackets/braces.
+3.  **MANDATORY ESCAPING inside STRING values:**
+    *   Double Quote (") MUST become \\"
+    *   Backslash (\\) MUST become \\\\
+    *   Newline MUST become \\n
+    *   Carriage Return MUST become \\r
+    *   Tab MUST become \\t
+    *   Backspace MUST become \\b
+    *   Form Feed MUST become \\f
+4.  **DO NOT ESCAPE:** Do NOT escape single quotes ('). Leave them as is within strings. Do NOT create invalid sequences like \\' or \\s.
+5.  **STICK TO STRUCTURE:** Use the exact field names and types specified.
+6.  **BASE ON TEXT ONLY:** Do not add external information. Follow instructions for missing data.`;
 
-Important Rules:
-- Your entire response MUST be a single, valid JSON object, starting with { and ending with }.
-- Do not include any explanatory text or markdown formatting before or after the JSON.
-- Base all information strictly on the provided article text. Do not add external knowledge or guess information not present.
-- If a field (like 'date') or a specific 'factSection' cannot be reliably determined from the text, follow the instructions precisely (e.g., use "Date not specified in text" or omit the section).`;
 
-
-        // --- Step 3: Call Claude API ---
+        // --- Step 3: Call Claude API (Keep System Prompt, Low Temperature) ---
         console.log(`Sending request to Claude API for ${articleUrl}. Prompt length: ~${prompt.length} chars`);
-        const claudeResponse = await anthropiClient.messages.create({
-            model: "claude-3-haiku-20240307", // Fastest/cheapest for this task
-            max_tokens: 3072, // Increased slightly for potentially complex JSON structure
+        const claudeResponse = await anthropicClient.messages.create({
+            model: "claude-3-haiku-20240307",
+            max_tokens: 3500, // Increased slightly more just in case escaping adds length
+            // Add System Prompt
+            system: "You are an expert data extraction tool. Your sole purpose is to return valid, correctly formatted JSON based precisely on the user's instructions and the provided text. You output ONLY the JSON object requested, nothing else. Ensure all special characters within JSON string values are properly escaped according to JSON specification.",
             messages: [{ role: 'user', content: prompt }],
-            // Consider adding system prompt for stricter JSON output if needed:
-            // system: "You are an AI assistant that strictly follows instructions and outputs only valid JSON.",
-            temperature: 0.2, // Lower temperature for more factual, less creative JSON generation
+            temperature: 0.1, // Keep temperature low
         });
-
         console.log(`Received response from Claude API for ${articleUrl}. Output tokens: ${claudeResponse.usage.output_tokens}`);
 
-        // --- Step 4: Parse Claude's Response ---
-        // Guard against empty or unexpected response content
+        // --- Step 4: Parse Claude's Response (Add Cleanup Step) ---
         if (!claudeResponse.content || claudeResponse.content.length === 0 || claudeResponse.content[0].type !== 'text' || !claudeResponse.content[0].text) {
              console.error('Unexpected or empty response structure from Claude API:', JSON.stringify(claudeResponse));
              throw new Error('Received an unexpected or empty response from the analysis service.');
         }
-        const jsonString = claudeResponse.content[0].text;
+        const rawJsonString = claudeResponse.content[0].text.trim(); // Get raw string
 
+        let extractedJson = rawJsonString; // Default to raw string initially
+        let cleanedJsonString = rawJsonString; // Variable for the cleaned string
         let parsedData: ExpectedClaudeResponse;
-        try {
-            // More robust JSON extraction: find the first '{' and the last '}'
-            const jsonStart = jsonString.indexOf('{');
-            const jsonEnd = jsonString.lastIndexOf('}');
-            if (jsonStart === -1 || jsonEnd === -1 || jsonEnd < jsonStart) {
-                 console.error('Could not find valid JSON object delimiters { } in Claude response:', jsonString);
-                throw new Error('Analysis service response did not contain a valid JSON object.');
-            }
-            const extractedJson = jsonString.substring(jsonStart, jsonEnd + 1);
 
-            parsedData = JSON.parse(extractedJson);
-            console.log(`Successfully parsed Claude JSON response for ${articleUrl}.`);
+        try {
+            // Attempt to extract JSON object boundaries first
+            const jsonStart = rawJsonString.indexOf('{');
+            const jsonEnd = rawJsonString.lastIndexOf('}');
+
+            if (jsonStart === -1 || jsonEnd === -1 || jsonEnd < jsonStart) {
+                 console.error('Could not find valid JSON object delimiters { } in Claude response. Raw Response:', rawJsonString); // Log raw string on delimiter error
+                throw new Error('Analysis service response did not contain recognizable JSON object delimiters.');
+            }
+            extractedJson = rawJsonString.substring(jsonStart, jsonEnd + 1);
+
+            // ** APPLY CLEANUP FUNCTION **
+            cleanedJsonString = cleanupJsonString(extractedJson);
+            if (cleanedJsonString !== extractedJson) {
+                console.log("DEBUG: Applied cleanup transformations to JSON string.");
+            }
+
+            // Attempt to parse the CLEANED JSON
+            parsedData = JSON.parse(cleanedJsonString);
+            console.log(`Successfully parsed Claude JSON response for ${articleUrl} (after cleanup).`);
 
         } catch (parseError: any) {
             console.error(`Error parsing Claude JSON response for ${articleUrl}:`, parseError);
+            // ** CRITICAL DEBUGGING STEP **
             console.error('--- Raw Claude response string ---');
-            console.error(jsonString); // Log the problematic string
-            console.error('--- End Raw Claude response ---');
-            throw new Error(`Failed to process the analysis service response (JSON parse error): ${parseError.message}`);
+            console.error(rawJsonString); // Log the ORIGINAL raw string from Claude
+            console.error('--- Extracted JSON string (before cleanup) ---');
+            console.error(extractedJson); // Log the potentially extracted substring
+            console.error('--- Cleaned JSON string (attempted fix) ---');
+            console.error(cleanedJsonString); // Log the string AFTER cleanup attempts
+            console.error('--- End Logs ---');
+
+            const errorMessage = parseError.message.includes('position')
+               ? parseError.message // Keep position info if available
+               : `Failed to process the analysis service response (JSON parse error): ${parseError.message}`;
+            throw new Error(errorMessage);
         }
 
         // --- Step 5: Format data for Frontend ---
-        // Add IDs to factSections that were returned by Claude
         const storyData: StoryData = {
-            ...parsedData, // Spread the parsed data (title, source, date, summary, highlights)
-            factSections: parsedData.factSections.map(section => ({
+            title: parsedData.title || fetchedTitle,
+            source: parsedData.source || inferredSource,
+            date: parsedData.date, // Use the date determined by Claude based on instructions
+            summary: parsedData.summary,
+            highlights: Array.isArray(parsedData.highlights) ? parsedData.highlights : [], // Ensure it's an array
+            imageUrl: scrapedImageUrl, // Use the image URL found by scraper
+            factSections: Array.isArray(parsedData.factSections) // Ensure it's an array
+                ? parsedData.factSections.map(section => ({
                     ...section,
-                    id: generateId(section.title) // Generate ID based on the title Claude provided
-            })),
+                    id: generateId(section.title) // Generate ID based on the DYNAMIC title
+                  }))
+                : [],
         };
 
+        console.log(`DEBUG: Final storyData (dynamic sections) for ${articleUrl}: Title='${storyData.title}', Date='${storyData.date}', Image='${storyData.imageUrl}', Highlights=${storyData.highlights.length}, Sections=${storyData.factSections.length}`);
+        if (storyData.factSections.length > 0) {
+            console.log(`DEBUG: Generated Section Titles: ${storyData.factSections.map(s => s.title).join('; ')}`); // Log titles
+        }
+
+
         // --- Step 6: Send Response to Frontend ---
-        return NextResponse.json(storyData, { status: 200 }); // Use NextResponse
+        return NextResponse.json(storyData, { status: 200 });
 
     } catch (error: any) {
-        console.error(`Critical Error in POST /api/process-article for URL ${req.url}:`, error);
-        // Provide a generic error message to the client but log the specific one
-        return NextResponse.json({ error: error.message || 'An internal server error occurred while processing the article.' }, { status: 500 });
+        console.error(`Critical Error in POST /api/process-article for URL ${req?.url || 'unknown'}:`, error);
+        // Return the specific error message from getAnthropicClient or the caught error
+        return NextResponse.json({ error: error.message || 'An internal server error occurred.' }, { status: 500 });
     }
 }
 
-// Optional: Add a GET handler for testing the route existence
+// GET handler
 export async function GET(req: Request) {
-    return NextResponse.json({ message: "API route is active. Use POST method to process an article URL." });
+    try {
+        getAnthropicClient();
+         return NextResponse.json({ message: "API route active. API key seems configured. Use POST to process an article." });
+    } catch(error: any) {
+         return NextResponse.json({ message: `API route active, but config error: ${error.message}. Use POST to process an article.` }, { status: 500 });
+    }
 }
