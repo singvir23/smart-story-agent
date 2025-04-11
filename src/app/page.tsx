@@ -363,7 +363,7 @@ const SmartStorySuite: React.FC = () => {
          {!storyData && !isLoading && !error && (
           <div className="text-center mb-8 pt-10">
               <h2 className={`text-2xl font-semibold mb-3 ${titleFont} ${isDarkMode ? 'text-white' : 'text-gray-700'}`}>
-                  Smart Story Analyzer
+                  New View News Analyzer
               </h2>
              <p className={`${isDarkMode ? 'text-slate-400' : 'text-gray-500'} text-sm max-w-md mx-auto`}>
                  Enter the article URL below to either scan details or dive deep into its structure and content.
@@ -458,7 +458,7 @@ const SmartStorySuite: React.FC = () => {
                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between">
                         <p className={`text-xs sm:text-sm mb-3 sm:mb-0 ${isDarkMode ? 'text-slate-400' : 'text-gray-500'}`}>
                             Source: <span className="font-medium">{storyData.source}</span>
-                            {storyData.author && (<> | Author: <span className="font-medium">{storyData.author}</span></>)}
+                            {storyData.author && (<> | By: <span className="font-medium">{storyData.author}</span></>)}
                             {storyData.date && storyData.date !== 'Date not specified' && (<> | {storyData.date}</>)}
                         </p>
                         {/* Full View Mode Buttons */}
@@ -543,7 +543,7 @@ const SmartStorySuite: React.FC = () => {
                             <div className={`text-xs space-y-1.5 ${isDarkMode ? 'text-slate-300' : 'text-gray-600'}`}>
                                 {storyData.date && storyData.date !== 'Date not specified' && ( <p><span className="font-medium">Published:</span> {storyData.date}</p> )}
                                 <p><span className="font-medium">Source:</span> {storyData.source}</p>
-                                <p><span className="font-medium">Author:</span> {storyData.author || 'Not Available'}</p>
+                                <p><span className="font-medium">By:</span> {storyData.author || 'Not Available'}</p>
                             </div>
                              {/* Full View Original Button */}
                              <a
@@ -638,7 +638,7 @@ const SmartStorySuite: React.FC = () => {
 
               {/* Footer */}
               <footer className={`p-4 text-center text-xs ${isDarkMode ? 'bg-slate-900 text-slate-500 border-t border-slate-700' : 'bg-gray-50 text-gray-500 border-t border-gray-200'}`}>
-                Smart Story Suite
+                New View News
               </footer>
             </motion.div>
          )}
