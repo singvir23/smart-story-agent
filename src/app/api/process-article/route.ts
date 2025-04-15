@@ -16,6 +16,7 @@ interface ExpectedClaudeResponse {
         title: string; // Titles will now be dynamic
         content: string;
     }>;
+    quotes: string[]; // Array of quotes extracted from the article
 }
 
 // Define interfaces for data structure (shared with frontend is ideal)
@@ -36,6 +37,7 @@ interface StoryData {
     imageUrl?: string | null; // Primary og:image
     imageUrls?: string[]; // List of additional image URLs
     originalUrl: string; // Original URL for frontend button
+    quotes: string[]; // Array of quotes extracted from the article
 }
 
 // Helper to generate simple IDs
@@ -324,29 +326,31 @@ JSON Structure:
 {
   "title": "(string) The main title of the article. Infer from the text or use '${fetchedTitle}' if accurate.",
   "source": "(string) The source publication or website. Use '${inferredSource}' or refine based *only* on the text.",
-  "date": "(string) The publication date *explicitly mentioned* in the article text (e.g., "April 9, 2025", "last Tuesday"). If found, use that formatted as 'Month Day, Year'. If not explicitly mentioned in the text but a date was scraped ('${scrapedDate || 'None'}'), use the scraped date string provided. Otherwise, use the string 'Date not specified'.",
+  "date": "(string) The publication date *explicitly mentioned* in the article text (e.g., 'April 9, 2025', 'last Tuesday'). If found, use that formatted as 'Month Day, Year'. If not explicitly mentioned in the text but a date was scraped ('${scrapedDate || 'None'}'), use the scraped date string provided. Otherwise, use the string 'Date not specified'.",
   "summary": "(string) A concise, neutral summary of the article's main points (2-4 sentences maximum).",
   "highlights": "(array of strings) Exactly 3 key, distinct takeaways or factual highlights directly supported by the article text. If 3 distinct highlights cannot be found, provide as many as possible up to 3. Each highlight should be a concise sentence.",
   "factSections": "(array of objects) <<< IMPORTANT: Generate this dynamically based on content. >>>
       1. Identify 3 to 5 distinct, significant sub-topics, themes, or key aspects discussed within the article text.
       2. For each identified sub-topic, create an object in this array.
       3. Each object MUST have:
-         - "title": "(string) A concise, descriptive title for the specific sub-topic identified (e.g., "Rose Development Details", "Market Availability and Pricing", "Stewart's Involvement", "Scent Profile Comparison"). Titles should be specific to the article's content, NOT generic like "Introduction", "Key Points", "Conclusion", "Background".
-         - "content": "(string) Summary (1-3 sentences) relevant ONLY to this section title. <<< CRITICAL: Ensure this string value is valid JSON. Escape ALL necessary characters: double quotes must be \\", backslashes must be \\\\, newlines must be \\n, etc. Do NOT escape single quotes ('). >>>"
-      4. If fewer than 3 distinct, significant sub-topics can be reasonably identified from the text, provide only those that are found. Do not force sections or invent information. Omit this entire 'factSections' array only if the article is extremely short or lacks any distinct sub-topics."
+         - \"title\": \"(string) A concise, descriptive title for the specific sub-topic identified (e.g., 'Rose Development Details', 'Market Availability and Pricing', 'Stewart's Involvement', 'Scent Profile Comparison'). Titles should be specific to the article's content, NOT generic like 'Introduction', 'Key Points', 'Conclusion', 'Background'.\"
+         - \"content\": \"(string) Summary (1-3 sentences) relevant ONLY to this section title. <<< CRITICAL: Ensure this string value is valid JSON. Escape ALL necessary characters: double quotes must be \\\", backslashes must be \\\\, newlines must be \\\\n, etc. Do NOT escape single quotes ('). >>>\"
+      4. If fewer than 3 distinct, significant sub-topics can be reasonably identified from the text, provide only those that are found. Do not force sections or invent information. Omit this entire 'factSections' array only if the article is extremely short or lacks any distinct sub-topics.",
+  "quotes": "(array of strings) Extract any direct quotes from other people mentioned in the article. Each quote should be a concise sentence and attributed to the person if their name is provided in the text. If no quotes are found, return an empty array. Do not end with a \""""
 }
+
 
 Critical JSON Rules & Escaping Guide:
 1.  **OUTPUT JSON ONLY:** Start with '{', end with '}', nothing else.
 2.  **VALID SYNTAX:** Use double quotes for all keys and string values. Ensure correct commas (no trailing commas). Match brackets/braces.
 3.  **MANDATORY ESCAPING inside STRING values:**
-    *   Double Quote (") MUST become \\"
-    *   Backslash (\\) MUST become \\\\
-    *   Newline MUST become \\n
-    *   Carriage Return MUST become \\r
-    *   Tab MUST become \\t
-    *   Backspace MUST become \\b
-    *   Form Feed MUST become \\f
+    *   Double Quote (") MUST become \\""
+    *   Backslash (\\) MUST become \\\\"
+    *   Newline MUST become \\n"
+    *   Carriage Return MUST become \\r"
+    *   Tab MUST become \\t"
+    *   Backspace MUST become \\b"
+    *   Form Feed MUST become \\f"
 4.  **DO NOT ESCAPE:** Do NOT escape single quotes ('). Leave them as is within strings. Do NOT create invalid sequences like \\' or \\s.
 5.  **STICK TO STRUCTURE:** Use the exact field names and types specified.
 6.  **BASE ON TEXT ONLY:** Do not add external information. Follow instructions for missing data.`;
@@ -429,6 +433,7 @@ Critical JSON Rules & Escaping Guide:
                     id: generateId(section.title)
                   }))
                 : [],
+            quotes: Array.isArray(parsedData.quotes) ? parsedData.quotes.map(quote => quote.replace(/^"|"$/g, '')) : [], // Remove extra quotes
         };
 
         console.log(`DEBUG: Final storyData: Title='${storyData.title}', Author='${storyData.author || 'N/A'}', Date='${storyData.date || 'N/A'}', PrimaryImage='${storyData.imageUrl || 'N/A'}', AdditionalImages=${storyData.imageUrls?.length ?? 0}, Sections=${storyData.factSections.length}`);

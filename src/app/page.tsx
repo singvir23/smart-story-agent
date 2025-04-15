@@ -19,6 +19,7 @@ interface StoryData {
     summary: string;
     highlights: string[];
     factSections: FactSection[];
+    quotes: string[]; // Direct quotes from people mentioned in the article
     imageUrl?: string | null; // Primary image
     imageUrls?: string[]; // Additional images
     originalUrl: string; // Original URL
@@ -221,7 +222,7 @@ const SmartStorySuite: React.FC = () => {
   const [isDarkMode, setIsDarkMode] = useState<boolean>(false);
   const [imageLoadError, setImageLoadError] = useState<boolean>(false); // For PRIMARY image
   const [enlargedImageUrl, setEnlargedImageUrl] = useState<string | null>(null); // State for enlarged image
-
+    
   // Attempt to read initial dark mode preference from localStorage
   useEffect(() => {
     const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -350,6 +351,7 @@ const SmartStorySuite: React.FC = () => {
    const closeImageOverlay = () => {
        setEnlargedImageUrl(null);
    };
+   console.log("Quotes:", storyData);
 
 
   const bodyFont = 'font-sans';
@@ -492,7 +494,7 @@ const SmartStorySuite: React.FC = () => {
                              <motion.p variants={sidebarItemVariants} className={`text-sm px-1 ${isDarkMode ? 'text-slate-500' : 'text-gray-500'}`}>No specific sections found.</motion.p>
                            )}
                          </div>
-                     </div>
+                      </div>
                  </motion.nav>
 
                 {/* Center Content */}
@@ -630,6 +632,28 @@ const SmartStorySuite: React.FC = () => {
                            </motion.div>
                         )}
                         {/* --- END: Additional Images Display --- */}
+
+                        {/* Move "Featured Quotes" section to the right side under the images */}
+                        {storyData.quotes && storyData.quotes.length > 0 && (
+                           <motion.div variants={itemVariants} className="space-y-3">
+                              <h4 className={`text-xs font-semibold uppercase tracking-wider ${isDarkMode ? 'text-teal-400' : 'text-teal-600'}`}>
+                                  Featured Quotes
+                              </h4>
+                              <div className="flex flex-col space-y-2">
+                                  {storyData.quotes.slice(0, 3).map((quote, index) => (
+                                     <motion.div
+                                         key={`quote-${index}`}
+                                         variants={sidebarItemVariants}
+                                         className={`p-3 rounded-md text-sm ${isDarkMode ? 'bg-slate-700 text-slate-300' : 'bg-gray-100 text-gray-700'} border ${
+                                             isDarkMode ? 'border-slate-600' : 'border-gray-300'
+                                         }`}
+                                     >
+                                         <p className="italic">"{quote}"</p>
+                                     </motion.div>
+                                  ))}
+                              </div>
+                           </motion.div>
+                        )}
 
                      </div>
                  </motion.aside>
