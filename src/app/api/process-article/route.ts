@@ -324,7 +324,7 @@ JSON Structure:
 {
   "title": "(string) The main title of the article. Infer from the text or use '${fetchedTitle}' if accurate.",
   "source": "(string) The source publication or website. Use '${inferredSource}' or refine based *only* on the text.",
-  "date": "(string) The publication date *explicitly mentioned* in the article text (e.g., "April 9, 2025", "last Tuesday"). If found, use that formatted as 'Month Day, Year'. If not explicitly mentioned in the text but a date was scraped ('${scrapedDate || 'None'}'), use the scraped date string provided. Otherwise, use the string 'Date not specified'.",
+  "date": "(string) The publication date *explicitly mentioned* in the article text (e.g., "April 9, 2025", "last Tuesday"). If found, use that formatted as 'Month Day, Year'. If not explicitly mentioned in the text but a date was scraped ('${scrapedDate || 'None'}'), use the scraped date string provided. Only include a date if it was published in the year 2025. Otherwise, use the string 'Date not specified'.",
   "summary": "(string) A concise, neutral summary of the article's main points (2-4 sentences maximum).",
   "highlights": "(array of strings) Exactly 3 key, distinct takeaways or factual highlights directly supported by the article text. If 3 distinct highlights cannot be found, provide as many as possible up to 3. Each highlight should be a concise sentence.",
   "factSections": "(array of objects) <<< IMPORTANT: Generate this dynamically based on content. >>>
