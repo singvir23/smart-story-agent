@@ -3,6 +3,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { posthog } from '@/lib/posthog';
 
 // --- Interfaces ---
 interface FactSection {
@@ -354,6 +355,38 @@ const SmartStorySuite: React.FC = () => {
 
   const bodyFont = 'font-sans';
   const titleFont = 'font-serif'; // Keep serif for titles
+
+  // Initializaing PostHog
+  useEffect(() => {
+    posthog.init(process.env.NEXT_PUBLIC_POSTHOG_KEY!, {
+        api_host: 'https://us.i.posthog.com',
+        capture_pageview: true,
+        autocapture: true,
+        rageclick: true
+    })
+
+    // // Capturing what text has been highlighted
+    // const handleTextSelect = () => {
+    //     const selection = window.getSelection()
+    //     const selectedText = selection?.toString().trim()
+      
+    //     if (selectedText) {
+    //     console.log("Highlight captured:", selectedText)
+    //       posthog.capture('text_selected', {
+    //         text: selectedText,
+    //         length: selectedText.length
+    //       })
+    //     }
+
+    //     document.addEventListener('mouseup', handleTextSelect)
+    //     document.addEventListener('keyup', handleTextSelect)
+
+    //     return () => {
+    //         document.removeEventListener('mouseup', handleTextSelect)
+    //         document.removeEventListener('keyup', handleTextSelect)
+    //     }
+    // }
+  }, [])
 
   return (
     <div className={`${isDarkMode ? 'bg-slate-900 text-slate-200' : 'bg-gray-100 text-gray-800'} min-h-screen transition-colors duration-300 ${bodyFont}`}>
