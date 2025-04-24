@@ -3,6 +3,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { posthog } from '@/lib/posthog';
 
 // --- Interfaces ---
 interface FactSection {
@@ -355,6 +356,38 @@ const SmartStorySuite: React.FC = () => {
   const bodyFont = 'font-sans';
   const titleFont = 'font-serif'; // Keep serif for titles
 
+  // Initializaing PostHog
+  useEffect(() => {
+    posthog.init(process.env.NEXT_PUBLIC_POSTHOG_KEY!, {
+        api_host: 'https://us.i.posthog.com',
+        capture_pageview: true,
+        autocapture: true,
+        rageclick: true
+    })
+
+    // // Capturing what text has been highlighted
+    // const handleTextSelect = () => {
+    //     const selection = window.getSelection()
+    //     const selectedText = selection?.toString().trim()
+      
+    //     if (selectedText) {
+    //     console.log("Highlight captured:", selectedText)
+    //       posthog.capture('text_selected', {
+    //         text: selectedText,
+    //         length: selectedText.length
+    //       })
+    //     }
+
+    //     document.addEventListener('mouseup', handleTextSelect)
+    //     document.addEventListener('keyup', handleTextSelect)
+
+    //     return () => {
+    //         document.removeEventListener('mouseup', handleTextSelect)
+    //         document.removeEventListener('keyup', handleTextSelect)
+    //     }
+    // }
+  }, [])
+
   return (
     <div className={`${isDarkMode ? 'bg-slate-900 text-slate-200' : 'bg-gray-100 text-gray-800'} min-h-screen transition-colors duration-300 ${bodyFont}`}>
       <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
@@ -363,7 +396,7 @@ const SmartStorySuite: React.FC = () => {
          {!storyData && !isLoading && !error && (
           <div className="text-center mb-8 pt-10">
               <h2 className={`text-2xl font-semibold mb-3 ${titleFont} ${isDarkMode ? 'text-white' : 'text-gray-700'}`}>
-                  New View News Analyzer - Beta
+                  New View News Analyzer
               </h2>
              <p className={`${isDarkMode ? 'text-slate-400' : 'text-gray-500'} text-sm max-w-md mx-auto`}>
                  Enter the article URL below to either scan details or dive deep into its structure and content.
@@ -638,7 +671,7 @@ const SmartStorySuite: React.FC = () => {
 
               {/* Footer */}
               <footer className={`p-4 text-center text-xs ${isDarkMode ? 'bg-slate-900 text-slate-500 border-t border-slate-700' : 'bg-gray-50 text-gray-500 border-t border-gray-200'}`}>
-                New View News - Beta
+                New View News
               </footer>
             </motion.div>
          )}
