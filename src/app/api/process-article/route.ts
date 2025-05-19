@@ -338,16 +338,17 @@ JSON Structure:
   "date": "(string) The publication date *explicitly mentioned* in the article text (e.g., "April 9, 2025", "last Tuesday"). If found, use that formatted as 'Month Day, Year'. If not explicitly mentioned in the text but a date was scraped ('${scrapedDate || 'None'}'), use the scraped date string provided. Only include a date if it was published in the year 2025. Otherwise, use the string 'Date not specified'.",
   "summary": "(string) A concise, neutral summary of the article's main points (2-4 sentences maximum).",
   "highlights": "(array of strings) Exactly 3 key, distinct takeaways or factual highlights directly supported by the article text. If 3 distinct highlights cannot be found, provide as many as possible up to 3. Each highlight should be a concise sentence.",
-  "factSections": "(array of objects) <<< IMPORTANT: Generate this by segmenting the article. >>>
+  "factSections": "(array of objects) <<< IMPORTANT: Generate this by segmenting the article into EXACT 150-word chunks. >>>
       1.  Take the entire '--- ARTICLE TEXT START ---' to '--- ARTICLE TEXT END ---' block (referred to as 'the article text' below).
-      2.  Divide the article text into sequential segments, where each segment is approximately 125 words long.
-      3.  For each segment, create an object in this 'factSections' array.
+      2.  Divide the article text into sequential segments, where each segment is EXACTLY 150 words long. Do not truncate or remove any content.
+      3.  For each 150-word segment, create an object in this 'factSections' array.
       4.  Each object MUST have:
           -   \\"title\\": \\"(string) A concise, descriptive title for this specific segment of the article. For example, if the segment discusses the project's origin, a title could be 'Project Inception'. If a topic spans multiple segments, use sequential titles like 'Market Analysis - Part 1', 'Market Analysis - Part 2'. The title should reflect the main idea of *that specific segment's text*. Do NOT use generic titles like 'Section 1', 'Chunk 2'.
-          -   \\"content\\": \\"(string) The exact text of this segment from the article (approximately 125 words). DO NOT summarize or rephrase this content. Preserve the original wording from the article text. <<< CRITICAL: Ensure this string value is valid JSON. Escape ALL necessary characters: double quotes must be \\\\\\", backslashes must be \\\\\\\\\\\\, newlines must be \\\\\\\\n, etc. Do NOT escape single quotes ('). >>>\\"
-      5.  If the final segment is shorter than 125 words (but still contains meaningful text), include it as its own section with its actual content and an appropriate title.
-      6.  If the total article text is less than 125 words, create a single 'factSection' containing the entire article text, with an appropriate descriptive title.
-      7.  If the article text is extremely short (e.g., less than 20 words) or effectively empty after extraction, you may return an empty array \`[]\` for 'factSections'.",
+          -   \\"content\\": \\"(string) The exact text of this 150-word segment from the article. DO NOT summarize or rephrase this content. Preserve ALL original content including quotes, formatting, and special characters. <<< CRITICAL: Ensure this string value is valid JSON. Escape ALL necessary characters: double quotes must be \\\\\\", backslashes must be \\\\\\\\\\\\, newlines must be \\\\\\\\n, etc. Do NOT escape single quotes ('). >>>\\"
+      5.  If the final segment is less than 150 words (but still contains text), include it as its own section with its actual content and an appropriate title.
+      6.  If the total article text is less than 150 words, create a single 'factSection' containing the entire article text, with an appropriate descriptive title.
+      7.  If the article text is extremely short (e.g., less than 20 words) or effectively empty after extraction, you may return an empty array \`[]\` for 'factSections'.
+      8.  IMPORTANT: Do not truncate or remove any content from the original article. Every word must be preserved in one of the sections.",
   "spiceScore": "(object or null) <<< NEW: Analyze the article text according to the SPICE rubric below and provide the scores. If the article is too short or lacks substance for a meaningful score, return null for this entire 'spiceScore' field. >>>
     {
       \\"s\\": (number) Scannability score (1-5),
@@ -419,7 +420,7 @@ Critical JSON Rules & Escaping Guide:
         const claudeResponse = await anthropicClient.messages.create({
             model: "claude-3-haiku-20240307", // Consider Opus/Sonnet for complex instructions or longer context
             max_tokens: 4000, 
-            system: "You are an expert data extraction and analysis tool. Your sole purpose is to return valid, correctly formatted JSON based precisely on the user's instructions and the provided text. You output ONLY the JSON object requested, nothing else. Ensure all special characters within JSON string values are properly escaped according to JSON specification. Perform the SPICE analysis accurately based *only* on the provided text. When creating 'factSections', adhere strictly to the 125-word segmentation rule and use the original text for content.",
+            system: "You are an expert data extraction and analysis tool. Your sole purpose is to return valid, correctly formatted JSON based precisely on the user's instructions and the provided text. You output ONLY the JSON object requested, nothing else. Ensure all special characters within JSON string values are properly escaped according to JSON specification. Perform the SPICE analysis accurately based *only* on the provided text. When creating 'factSections', adhere strictly to the 150-word segmentation rule and use the original text for content.",
             messages: [{ role: 'user', content: prompt }],
             temperature: 0.1,
         });
