@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { posthog } from '@/lib/posthog';
+import Image from 'next/image';
 
 // --- Interfaces ---
 interface FactSection {
@@ -197,10 +198,13 @@ const ImageOverlay: React.FC<ImageOverlayProps> = ({ imageUrl, onClose }) => {
         variants={enlargedImageVariants}
         onClick={(e) => e.stopPropagation()}
       >
-        <img
+        <Image
           src={imageUrl}
           alt="Enlarged view"
           className="block max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl"
+          width={800}
+          height={400}
+          priority
         />
          <button
             type="button"
@@ -270,7 +274,6 @@ const SmartStorySuite: React.FC = () => {
     } else {
       setIsDarkMode(prefersDark);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -323,7 +326,7 @@ const SmartStorySuite: React.FC = () => {
            if (!response.ok) {
                 const errorMsg = data?.error || `Request failed with status: ${response.status} ${response.statusText}`;
                  if (response.status >= 500 && response.status < 600) {
-                     throw new Error("Something wasn’t right with the analysis service. Please try pasting the URL again or try a different article.");
+                     throw new Error("Something wasn't right with the analysis service. Please try pasting the URL again or try a different article.");
                  } else if (response.status === 400) {
                      throw new Error(`Invalid request${data?.error ? `: ${data.error}` : '.'} Please check the URL.`);
                  } else if (response.status === 403 || response.status === 404) {
@@ -344,7 +347,7 @@ const SmartStorySuite: React.FC = () => {
                message = err.message;
            }
            if (message.toLowerCase().includes('fetch') || message.toLowerCase().includes('network') || message.toLowerCase().includes('service')) {
-              message = "Something wasn’t right. Please check your connection and try pasting the URL again.";
+              message = "Something wasn't right. Please check your connection and try pasting the URL again.";
            }
            setError(message);
            setStoryData(null);
@@ -628,17 +631,13 @@ const SmartStorySuite: React.FC = () => {
                                             title="Click to enlarge"
                                             disabled={!storyData.imageUrl}
                                         >
-                                            <img
-                                                key={storyData.imageUrl}
-                                                src={storyData.imageUrl}
-                                                alt={storyData.title ? `${storyData.title} - primary image` : 'Article primary image'}
-                                                className="w-full h-auto object-cover block transition-transform duration-200 group-hover:scale-105"
-                                                loading="lazy"
-                                                onError={() => {
-                                                    console.warn("<<< Primary IMAGE ERROR >>> Primary image failed to load:", storyData.imageUrl);
-                                                    setImageLoadError(true);
-                                                }}
-                                                onLoad={() => { if(imageLoadError) setImageLoadError(false); }}
+                                            <Image
+                                                src={storyData.imageUrl || '/placeholder-image.jpg'}
+                                                alt={storyData.title}
+                                                width={800}
+                                                height={400}
+                                                className="w-full h-64 object-cover rounded-lg"
+                                                priority
                                             />
                                         </motion.button>
                                     ) : (
