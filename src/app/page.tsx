@@ -3,7 +3,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { posthog } from '@/lib/posthog';
-import Image from 'next/image';
 
 // --- Interfaces ---
 interface FactSection {
