@@ -198,13 +198,11 @@ const ImageOverlay: React.FC<ImageOverlayProps> = ({ imageUrl, onClose }) => {
         variants={enlargedImageVariants}
         onClick={(e) => e.stopPropagation()}
       >
-        <Image
+        <img
           src={imageUrl}
           alt="Enlarged view"
           className="block max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl"
-          width={800}
-          height={400}
-          priority
+          loading="eager"
         />
          <button
             type="button"
@@ -631,14 +629,11 @@ const SmartStorySuite: React.FC = () => {
                                             title="Click to enlarge"
                                             disabled={!storyData.imageUrl}
                                         >
-                                            <Image
+                                            <img
                                                 src={storyData.imageUrl || '/placeholder-image.jpg'}
                                                 alt={storyData.title}
-                                                width={800}
-                                                height={400}
-                                                className="w-full h-64 object-cover rounded-lg"
-                                                priority
-                                            />
+                                                className="w-full h-64 object-cover rounded-lg"  
+                                                loading="lazy"                                        />
                                         </motion.button>
                                     ) : (
                                         <div className="w-full aspect-video flex items-center justify-center">
