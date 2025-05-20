@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { posthog } from '@/lib/posthog';
-// No 'next/image' import is needed here
+import Image from 'next/image';
 
 // --- Interfaces ---
 interface FactSection {
@@ -12,6 +12,7 @@ interface FactSection {
     content: string;
 }
 
+// Interface for SPICE score data received from backend
 interface SpiceScoreData {
     s: number;
     p: number;
@@ -32,7 +33,7 @@ interface StoryData {
     imageUrl?: string | null;
     imageUrls?: string[];
     originalUrl: string;
-    spiceScore: SpiceScoreData | null;
+    spiceScore: SpiceScoreData | null; // Added SPICE score
 }
 
 // --- Animation Variants ---
@@ -127,7 +128,7 @@ interface AdditionalImageProps {
     src: string;
     alt: string;
     isDarkMode: boolean;
-    onClick: () => void;
+    onClick: () => void; // Add onClick handler prop
 }
 const AdditionalImage: React.FC<AdditionalImageProps> = ({ src, alt, isDarkMode, onClick }) => {
     const [hasError, setHasError] = useState(false);
@@ -152,10 +153,10 @@ const AdditionalImage: React.FC<AdditionalImageProps> = ({ src, alt, isDarkMode,
             whileTap={{ scale: 0.98 }}
             title="Click to enlarge"
         >
-            <img // Standard img tag
+            <img
                 src={src}
                 alt={alt}
-                className="w-full h-auto object-cover aspect-square block"
+                className={`w-full h-auto object-cover aspect-square block`}
                 loading="lazy"
                 onError={() => {
                     console.warn("<<< Additional IMAGE ERROR >>> Image failed:", src);
@@ -197,10 +198,13 @@ const ImageOverlay: React.FC<ImageOverlayProps> = ({ imageUrl, onClose }) => {
         variants={enlargedImageVariants}
         onClick={(e) => e.stopPropagation()}
       >
-        <img // Replaced Image with img
+        <Image
           src={imageUrl}
           alt="Enlarged view"
           className="block max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl"
+          width={800}
+          height={400}
+          priority
         />
          <button
             type="button"
@@ -223,6 +227,10 @@ interface SpiceScoreDisplayProps {
     isDarkMode: boolean;
 }
 const SpiceScoreDisplay: React.FC<SpiceScoreDisplayProps> = ({ scoreData, isDarkMode }) => {
+    // Calculate percentage for potential visual representation (optional)
+    // const percentage = (scoreData.total / 25) * 100;
+
+    // Simple Text display
     return (
         <div className="mt-3 pt-3 border-t border-dashed border-gray-300 dark:border-slate-600">
             <h4 className={`text-xs font-semibold mb-1.5 uppercase tracking-wider ${isDarkMode ? 'text-teal-400' : 'text-teal-600'}`}>
@@ -232,6 +240,7 @@ const SpiceScoreDisplay: React.FC<SpiceScoreDisplayProps> = ({ scoreData, isDark
                  <p className={`text-sm font-medium ${isDarkMode ? 'text-slate-200' : 'text-gray-700'}`}>
                      Total: <span className="text-lg font-bold">{scoreData.total}</span> / 25
                  </p>
+                 {/* Optional: Detailed breakdown on hover/tooltip? */}
                  <div className={`text-xs grid grid-cols-5 gap-1 text-center ${isDarkMode ? 'text-slate-400' : 'text-gray-500'}`}>
                     <span title={`Scannability: ${scoreData.s}/5`}>S:{scoreData.s}</span>
                     <span title={`Personalization: ${scoreData.p}/5`}>P:{scoreData.p}</span>
@@ -269,7 +278,7 @@ const SmartStorySuite: React.FC = () => {
 
   useEffect(() => {
     localStorage.setItem('darkMode', String(isDarkMode));
-    document.documentElement.classList.toggle('dark', isDarkMode);
+    document.documentElement.classList.toggle('dark', isDarkMode); // Add/remove 'dark' class on <html>
   }, [isDarkMode]);
 
 
@@ -301,7 +310,7 @@ const SmartStorySuite: React.FC = () => {
       setStoryData(null);
       setActiveSectionId(null);
       setReadMode('summary');
-      setImageLoadError(false); // Reset image error state for new submission
+      setImageLoadError(false);
       setEnlargedImageUrl(null);
 
       try {
@@ -328,9 +337,9 @@ const SmartStorySuite: React.FC = () => {
 
            console.log('<<< API RESPONSE >>> Primary imageUrl:', data?.imageUrl);
            console.log('<<< API RESPONSE >>> Additional imageUrls count:', data?.imageUrls?.length ?? 0);
-           console.log('<<< API RESPONSE >>> SPICE Score:', data?.spiceScore);
+           console.log('<<< API RESPONSE >>> SPICE Score:', data?.spiceScore); // Log SPICE score
 
-           setStoryData(data as StoryData);
+           setStoryData(data as StoryData); // Cast to StoryData (now includes spiceScore)
        } catch (err: unknown) {
           console.error("Failed to process article:", err);
           let message = 'An unexpected error occurred. Please try again.';
@@ -357,12 +366,10 @@ const SmartStorySuite: React.FC = () => {
         setEnlargedImageUrl(null);
    }
 
-   // This effect ensures that if a new storyData with an imageUrl is set,
-   // we attempt to load it by resetting imageLoadError.
-   // The <img> tag's onError will then set it to true if loading fails.
    useEffect(() => {
         if (storyData?.imageUrl) {
             setImageLoadError(false);
+            console.log("<<< EFFECT >>> Reset primary imageLoadError to false because storyData.imageUrl exists.");
         }
    }, [storyData?.imageUrl]);
 
@@ -380,6 +387,7 @@ const SmartStorySuite: React.FC = () => {
   const bodyFont = 'font-sans';
   const titleFont = 'font-serif';
 
+  // Initializaing PostHog
   useEffect(() => {
     posthog.init(process.env.NEXT_PUBLIC_POSTHOG_KEY!, {
         api_host: 'https://us.i.posthog.com',
@@ -387,6 +395,28 @@ const SmartStorySuite: React.FC = () => {
         autocapture: true,
         rageclick: true
     })
+
+    // // Capturing what text has been highlighted
+    // const handleTextSelect = () => {
+    //     const selection = window.getSelection()
+    //     const selectedText = selection?.toString().trim()
+      
+    //     if (selectedText) {
+    //     console.log("Highlight captured:", selectedText)
+    //       posthog.capture('text_selected', {
+    //         text: selectedText,
+    //         length: selectedText.length
+    //       })
+    //     }
+
+    //     document.addEventListener('mouseup', handleTextSelect)
+    //     document.addEventListener('keyup', handleTextSelect)
+
+    //     return () => {
+    //         document.removeEventListener('mouseup', handleTextSelect)
+    //         document.removeEventListener('keyup', handleTextSelect)
+    //     }
+    // }
   }, [])
 
   return (
@@ -460,6 +490,7 @@ const SmartStorySuite: React.FC = () => {
         </motion.div>
 
 
+        {/* --- Story Display Area (Conditional) --- */}
         <AnimatePresence>
          {storyData && !isLoading && (
             <motion.div
@@ -467,6 +498,7 @@ const SmartStorySuite: React.FC = () => {
                 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.5 }}
                 className={`rounded-lg shadow-lg overflow-hidden ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200/70'} border`}
             >
+              {/* Header */}
                <header className={`p-5 sm:p-6 ${isDarkMode ? 'border-b border-slate-700' : 'border-b border-gray-200'}`}>
                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4">
                         <h1 className={`text-2xl lg:text-3xl font-bold ${titleFont} leading-tight mb-2 sm:mb-0 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}> {storyData.title} </h1>
@@ -491,7 +523,10 @@ const SmartStorySuite: React.FC = () => {
                     </div>
                </header>
 
+
+              {/* Main content grid */}
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 p-5 sm:p-6">
+                {/* Left Nav */}
                  <motion.nav className="lg:col-span-3" variants={containerVariants} initial="hidden" animate="visible">
                       <div className="sticky top-6">
                          <h2 className={`text-xs font-semibold mb-3 uppercase tracking-wider ${isDarkMode ? 'text-teal-400' : 'text-teal-600'}`}>
@@ -512,6 +547,7 @@ const SmartStorySuite: React.FC = () => {
                      </div>
                  </motion.nav>
 
+                {/* Center Content */}
                  <motion.main className="lg:col-span-6 min-h-[400px]" variants={containerVariants} initial="hidden" animate="visible">
                       <HighlightsSummaryComponent story={storyData} isDarkMode={isDarkMode} />
                      <div className="space-y-6 mt-6">
@@ -544,8 +580,12 @@ const SmartStorySuite: React.FC = () => {
                       )}
                  </motion.main>
 
+
+                 {/* ===== START: UPDATED Right Aside - Image & SPICE Display ===== */}
                  <motion.aside className="lg:col-span-3" variants={containerVariants} initial="hidden" animate="visible">
                      <div className="sticky top-6 space-y-6">
+
+                        {/* Story Details card (including SPICE score) */}
                         <motion.div variants={itemVariants} className={`rounded-lg p-4 ${isDarkMode ? 'bg-slate-700/50 border-slate-600/50' : 'bg-gray-50/80 border-gray-200'} border`}>
                             <h3 className={`text-xs font-semibold mb-2.5 uppercase tracking-wider ${isDarkMode ? 'text-teal-400' : 'text-teal-600'}`}>Story Details</h3>
                             <div className={`text-xs space-y-1.5 ${isDarkMode ? 'text-slate-300' : 'text-gray-600'}`}>
@@ -568,11 +608,16 @@ const SmartStorySuite: React.FC = () => {
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                                 </svg>
                             </a>
+
+                             {/* --- SPICE Score Display --- */}
                              {storyData.spiceScore && (
                                 <SpiceScoreDisplay scoreData={storyData.spiceScore} isDarkMode={isDarkMode} />
                              )}
+                             {/* --- End SPICE Score Display --- */}
+
                         </motion.div>
 
+                        {/* --- Primary Image Display --- */}
                         {(storyData.imageUrl || imageLoadError) && (
                             <motion.div variants={itemVariants} className={`rounded-lg overflow-hidden shadow ${isDarkMode ? 'bg-slate-700/80 border-slate-600/50' : 'bg-gray-50 border-gray-200'} border `}>
                                 <div className={`relative ${isDarkMode ? 'bg-slate-600' : 'bg-gray-200'}`}>
@@ -586,18 +631,17 @@ const SmartStorySuite: React.FC = () => {
                                             title="Click to enlarge"
                                             disabled={!storyData.imageUrl}
                                         >
-                                            <img // Replaced Image with img
-                                                src={storyData.imageUrl}
+                                            <Image
+                                                src={storyData.imageUrl || '/placeholder-image.jpg'}
                                                 alt={storyData.title}
-                                                className="w-full h-64 object-cover rounded-t-lg" // Applied rounded-t-lg
-                                                onError={() => {
-                                                    console.warn("<<< Primary IMAGE ERROR >>> Main image failed:", storyData.imageUrl);
-                                                    setImageLoadError(true);
-                                                }}
+                                                width={800}
+                                                height={400}
+                                                className="w-full h-64 object-cover rounded-lg"
+                                                priority
                                             />
                                         </motion.button>
                                     ) : (
-                                        <div className="w-full h-64 flex items-center justify-center"> {/* Matched height */}
+                                        <div className="w-full aspect-video flex items-center justify-center">
                                             <svg xmlns="http://www.w3.org/2000/svg" className={`h-12 w-12 ${isDarkMode? 'text-slate-400' : 'text-gray-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}> <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /> </svg>
                                         </div>
                                     )}
@@ -613,6 +657,7 @@ const SmartStorySuite: React.FC = () => {
                             </motion.div>
                         )}
 
+                        {/* --- Additional Images Display --- */}
                         {storyData.imageUrls && storyData.imageUrls.length > 0 && (
                            <motion.div variants={itemVariants} className="space-y-3">
                               <h4 className={`text-xs font-semibold uppercase tracking-wider ${isDarkMode ? 'text-teal-400' : 'text-teal-600'}`}>
@@ -631,10 +676,14 @@ const SmartStorySuite: React.FC = () => {
                               </div>
                            </motion.div>
                         )}
+                        {/* --- END: Additional Images Display --- */}
+
                      </div>
                  </motion.aside>
+                 {/* ===== END: UPDATED Right Aside ===== */}
               </div>
 
+              {/* Footer */}
               <footer className={`p-4 text-center text-xs ${isDarkMode ? 'bg-slate-900 text-slate-500 border-t border-slate-700' : 'bg-gray-50 text-gray-500 border-t border-gray-200'}`}>
                 New View News - Beta
               </footer>
@@ -642,6 +691,7 @@ const SmartStorySuite: React.FC = () => {
          )}
         </AnimatePresence>
 
+        {/* --- Image Overlay --- */}
         <AnimatePresence>
             {enlargedImageUrl && (
                 <ImageOverlay
@@ -650,6 +700,7 @@ const SmartStorySuite: React.FC = () => {
                 />
             )}
         </AnimatePresence>
+
       </div>
     </div>
   );
