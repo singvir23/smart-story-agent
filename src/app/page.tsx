@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { posthog } from '@/lib/posthog';
-// import Image from 'next/image'; // Removed next/image import
+// No 'next/image' import is needed here
 
 // --- Interfaces ---
 interface FactSection {
@@ -155,7 +155,7 @@ const AdditionalImage: React.FC<AdditionalImageProps> = ({ src, alt, isDarkMode,
             <img // Standard img tag
                 src={src}
                 alt={alt}
-                className={`w-full h-auto object-cover aspect-square block`}
+                className="w-full h-auto object-cover aspect-square block"
                 loading="lazy"
                 onError={() => {
                     console.warn("<<< Additional IMAGE ERROR >>> Image failed:", src);
@@ -201,7 +201,6 @@ const ImageOverlay: React.FC<ImageOverlayProps> = ({ imageUrl, onClose }) => {
           src={imageUrl}
           alt="Enlarged view"
           className="block max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl"
-          // Removed width, height, priority - CSS handles sizing
         />
          <button
             type="button"
@@ -574,7 +573,7 @@ const SmartStorySuite: React.FC = () => {
                              )}
                         </motion.div>
 
-                        {(storyData.imageUrl || imageLoadError) && ( // Conditionally render this block
+                        {(storyData.imageUrl || imageLoadError) && (
                             <motion.div variants={itemVariants} className={`rounded-lg overflow-hidden shadow ${isDarkMode ? 'bg-slate-700/80 border-slate-600/50' : 'bg-gray-50 border-gray-200'} border `}>
                                 <div className={`relative ${isDarkMode ? 'bg-slate-600' : 'bg-gray-200'}`}>
                                     {storyData.imageUrl && !imageLoadError ? (
@@ -588,18 +587,17 @@ const SmartStorySuite: React.FC = () => {
                                             disabled={!storyData.imageUrl}
                                         >
                                             <img // Replaced Image with img
-                                                src={storyData.imageUrl} // Removed placeholder fallback here, handled by conditional rendering
+                                                src={storyData.imageUrl}
                                                 alt={storyData.title}
-                                                className="w-full h-64 object-cover rounded-t-lg" // Ensure consistency, if rounded-lg was above, use rounded-t-lg if there's a div below
+                                                className="w-full h-64 object-cover rounded-t-lg" // Applied rounded-t-lg
                                                 onError={() => {
                                                     console.warn("<<< Primary IMAGE ERROR >>> Main image failed:", storyData.imageUrl);
                                                     setImageLoadError(true);
                                                 }}
-                                                // Removed width, height, priority
                                             />
                                         </motion.button>
                                     ) : (
-                                        <div className="w-full h-64 flex items-center justify-center"> {/* Ensure same height as image */}
+                                        <div className="w-full h-64 flex items-center justify-center"> {/* Matched height */}
                                             <svg xmlns="http://www.w3.org/2000/svg" className={`h-12 w-12 ${isDarkMode? 'text-slate-400' : 'text-gray-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}> <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /> </svg>
                                         </div>
                                     )}
@@ -609,7 +607,7 @@ const SmartStorySuite: React.FC = () => {
                                         ? 'Primary image could not be loaded'
                                         : storyData.imageUrl
                                         ? 'Article primary image (click to enlarge)'
-                                        : '' // Handle case where imageUrl might be null but no error yet
+                                        : ''
                                     }
                                 </div>
                             </motion.div>
