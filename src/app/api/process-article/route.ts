@@ -91,21 +91,13 @@ function getAnthropicClient() {
     return new Anthropic({ apiKey });
 }
 
-// JSON Cleanup Function
-function cleanupJsonString(rawJson: string): string {
-    let cleaned = rawJson;
-    try { while (/\\\'/.test(cleaned)) { cleaned = cleaned.replace(/\\'/g, "'"); } } catch (e) { console.error("Error during \\' cleanup:", e); }
-    try { cleaned = cleaned.replace(/(?<!\\)\\(\s)/g, '$1'); } catch (e) { console.error("Error during \\s cleanup:", e); }
-    return cleaned;
-}
-
 // Add this helper function at the top level
 function cleanJsonString(str: string): string {
     // First, try to parse and stringify to normalize the JSON
     try {
         const parsed = JSON.parse(str);
         return JSON.stringify(parsed);
-    } catch (e) {
+    } catch {
         // If parsing fails, try to clean up common escape sequence issues
         return str
             .replace(/\\\\/g, '\\')  // Fix double backslashes
@@ -479,7 +471,7 @@ Critical JSON Rules & Escaping Guide:
         }
         const rawJsonString = claudeResponse.content[0].text.trim();
 
-        let cleanedJsonString = cleanJsonString(rawJsonString);
+        const cleanedJsonString = cleanJsonString(rawJsonString);
         let parsedData: ExpectedClaudeResponse;
 
         try {
