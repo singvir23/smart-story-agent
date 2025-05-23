@@ -32,7 +32,8 @@ interface StoryData {
     imageUrl?: string | null;
     imageUrls?: string[];
     originalUrl: string;
-    spiceScore: SpiceScoreData | null; // Added SPICE score
+    spiceScore: SpiceScoreData | null;
+    similarityScore: number;
 }
 
 // --- Animation Variants ---
@@ -249,6 +250,35 @@ const SpiceScoreDisplay: React.FC<SpiceScoreDisplayProps> = ({ scoreData, isDark
     );
 };
 
+// Add the SimilarityScoreDisplay component
+interface SimilarityScoreDisplayProps {
+    score: number;
+    isDarkMode: boolean;
+}
+const SimilarityScoreDisplay: React.FC<SimilarityScoreDisplayProps> = ({ score, isDarkMode }) => {
+    const getScoreColor = (score: number) => {
+        if (score >= 0.8) return isDarkMode ? 'text-green-400' : 'text-green-600';
+        if (score >= 0.6) return isDarkMode ? 'text-yellow-400' : 'text-yellow-600';
+        return isDarkMode ? 'text-red-400' : 'text-red-600';
+    };
+
+    return (
+        <div className="mt-3 pt-3 border-t border-dashed border-gray-300 dark:border-slate-600">
+            <h4 className={`text-xs font-semibold mb-1.5 uppercase tracking-wider ${isDarkMode ? 'text-teal-400' : 'text-teal-600'}`}>
+                Content Similarity Score
+            </h4>
+            <div className="flex items-center justify-between">
+                <p className={`text-sm font-medium ${isDarkMode ? 'text-slate-200' : 'text-gray-700'}`}>
+                    Score: <span className={`text-lg font-bold ${getScoreColor(score)}`}>{Math.round(score * 100)}%</span>
+                </p>
+                <div className={`text-xs ${isDarkMode ? 'text-slate-400' : 'text-gray-500'}`}>
+                    {score >= 0.8 ? 'Excellent' : score >= 0.6 ? 'Good' : 'Needs Review'}
+                </div>
+            </div>
+        </div>
+    );
+};
+
 
 // --- Main Component ---
 const SmartStorySuite: React.FC = () => {
@@ -323,7 +353,7 @@ const SmartStorySuite: React.FC = () => {
            if (!response.ok) {
                 const errorMsg = data?.error || `Request failed with status: ${response.status} ${response.statusText}`;
                  if (response.status >= 500 && response.status < 600) {
-                     throw new Error("Something wasn’t right with the analysis service. Please try pasting the URL again or try a different article.");
+                     throw new Error("Something wasn't right with the analysis service. Please try pasting the URL again or try a different article.");
                  } else if (response.status === 400) {
                      throw new Error(`Invalid request${data?.error ? `: ${data.error}` : '.'} Please check the URL.`);
                  } else if (response.status === 403 || response.status === 404) {
@@ -344,7 +374,7 @@ const SmartStorySuite: React.FC = () => {
                message = err.message;
            }
            if (message.toLowerCase().includes('fetch') || message.toLowerCase().includes('network') || message.toLowerCase().includes('service')) {
-              message = "Something wasn’t right. Please check your connection and try pasting the URL again.";
+              message = "Something wasn't right. Please check your connection and try pasting the URL again.";
            }
            setError(message);
            setStoryData(null);
@@ -611,6 +641,9 @@ const SmartStorySuite: React.FC = () => {
                                 <SpiceScoreDisplay scoreData={storyData.spiceScore} isDarkMode={isDarkMode} />
                              )}
                              {/* --- End SPICE Score Display --- */}
+
+                             {/* Similarity Score Display */}
+                             <SimilarityScoreDisplay score={storyData.similarityScore} isDarkMode={isDarkMode} />
 
                         </motion.div>
 

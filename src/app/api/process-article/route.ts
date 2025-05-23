@@ -67,7 +67,8 @@ interface StoryData {
     imageUrl?: string | null;
     imageUrls?: string[];
     originalUrl: string;
-    spiceScore: SpiceScoreData | null; // Added SPICE score object
+    spiceScore: SpiceScoreData | null;
+    similarityScore: number; // Add this new field
 }
 
 // Helper to generate simple IDs
@@ -98,6 +99,51 @@ function cleanupJsonString(rawJson: string): string {
     return cleaned;
 }
 
+// Add this helper function at the top level
+function cleanJsonString(str: string): string {
+    // First, try to parse and stringify to normalize the JSON
+    try {
+        const parsed = JSON.parse(str);
+        return JSON.stringify(parsed);
+    } catch (e) {
+        // If parsing fails, try to clean up common escape sequence issues
+        return str
+            .replace(/\\\\/g, '\\')  // Fix double backslashes
+            .replace(/\\"/g, '"')    // Fix escaped quotes
+            .replace(/\\n/g, '\n')   // Fix newlines
+            .replace(/\\t/g, '\t')   // Fix tabs
+            .replace(/\\r/g, '\r')   // Fix carriage returns
+            .replace(/\\f/g, '\f')   // Fix form feeds
+            .replace(/\\b/g, '\b');  // Fix backspaces
+    }
+}
+
+// Add this helper function for Dice coefficient calculation
+function calculateDiceCoefficient(str1: string, str2: string): number {
+    // Convert strings to sets of bigrams
+    const getBigrams = (str: string): Set<string> => {
+        const bigrams = new Set<string>();
+        for (let i = 0; i < str.length - 1; i++) {
+            bigrams.add(str.slice(i, i + 2));
+        }
+        return bigrams;
+    };
+
+    const bigrams1 = getBigrams(str1.toLowerCase());
+    const bigrams2 = getBigrams(str2.toLowerCase());
+
+    // Calculate intersection
+    let intersection = 0;
+    for (const bigram of bigrams1) {
+        if (bigrams2.has(bigram)) {
+            intersection++;
+        }
+    }
+
+    // Calculate Dice coefficient
+    const diceCoefficient = (2 * intersection) / (bigrams1.size + bigrams2.size);
+    return Math.round(diceCoefficient * 100) / 100; // Round to 2 decimal places
+}
 
 // POST function
 export async function POST(req: Request) {
@@ -343,26 +389,26 @@ JSON Structure:
       2.  Divide the article text into sequential segments, where each segment is EXACTLY 150 words long. Do not truncate or remove any content.
       3.  For each 150-word segment, create an object in this 'factSections' array.
       4.  Each object MUST have:
-          -   \\"title\\": \\"(string) A concise, descriptive title for this specific segment of the article. For example, if the segment discusses the project's origin, a title could be 'Project Inception'. If a topic spans multiple segments, use sequential titles like 'Market Analysis - Part 1', 'Market Analysis - Part 2'. The title should reflect the main idea of *that specific segment's text*. Do NOT use generic titles like 'Section 1', 'Chunk 2'.
-          -   \\"content\\": \\"(string) The exact text of this 150-word segment from the article. DO NOT summarize or rephrase this content. Preserve ALL original content including quotes, formatting, and special characters. <<< CRITICAL: Ensure this string value is valid JSON. Escape ALL necessary characters: double quotes must be \\\\\\", backslashes must be \\\\\\\\\\\\, newlines must be \\\\\\\\n, etc. Do NOT escape single quotes ('). >>>\\"
+          -   "title": "(string) A concise, descriptive title for this specific segment of the article. For example, if the segment discusses the project's origin, a title could be 'Project Inception'. If a topic spans multiple segments, use sequential titles like 'Market Analysis - Part 1', 'Market Analysis - Part 2'. The title should reflect the main idea of *that specific segment's text*. Do NOT use generic titles like 'Section 1', 'Chunk 2'.
+          -   "content": "(string) The exact text of this 150-word segment from the article. DO NOT summarize or rephrase this content. Preserve ALL original content including quotes, formatting, and special characters. IMPORTANT: Do not add any escape sequences - use the text exactly as it appears in the article."
       5.  If the final segment is less than 150 words (but still contains text), include it as its own section with its actual content and an appropriate title.
       6.  If the total article text is less than 150 words, create a single 'factSection' containing the entire article text, with an appropriate descriptive title.
       7.  If the article text is extremely short (e.g., less than 20 words) or effectively empty after extraction, you may return an empty array \`[]\` for 'factSections'.
       8.  IMPORTANT: Do not truncate or remove any content from the original article. Every word must be preserved in one of the sections.",
   "spiceScore": "(object or null) <<< NEW: Analyze the article text according to the SPICE rubric below and provide the scores. If the article is too short or lacks substance for a meaningful score, return null for this entire 'spiceScore' field. >>>
     {
-      \\"s\\": (number) Scannability score (1-5),
-      \\"p\\": (number) Personalization score (1-5),
-      \\"i\\": (number) Interactivity score (1-5),
-      \\"c\\": (number) Curation score (1-5),
-      \\"e\\": (number) Emotion score (1-5),
-      \\"total\\": (number) Sum of s, p, i, c, e (MUST be between 5 and 25 if not null),
-      \\"justifications\\": {
-        \\"scannability\\": \\"(string) Brief justification for the Scannability score.\\",
-        \\"personalization\\": \\"(string) Brief justification for the Personalization score.\\",
-        \\"interactivity\\": \\"(string) Brief justification for the Interactivity score.\\",
-        \\"curation\\": \\"(string) Brief justification for the Curation score.\\",
-        \\"emotion\\": \\"(string) Brief justification for the Emotion score.\\"
+      "s": (number) Scannability score (1-5),
+      "p": (number) Personalization score (1-5),
+      "i": (number) Interactivity score (1-5),
+      "c": (number) Curation score (1-5),
+      "e": (number) Emotion score (1-5),
+      "total": (number) Sum of s, p, i, c, e (MUST be between 5 and 25 if not null),
+      "justifications": {
+        "scannability": "(string) Brief justification for the Scannability score.",
+        "personalization": "(string) Brief justification for the Personalization score.",
+        "interactivity": "(string) Brief justification for the Interactivity score.",
+        "curation": "(string) Brief justification for the Curation score.",
+        "emotion": "(string) Brief justification for the Emotion score."
       }
     }"
 }
@@ -433,25 +479,10 @@ Critical JSON Rules & Escaping Guide:
         }
         const rawJsonString = claudeResponse.content[0].text.trim();
 
-        let extractedJson = rawJsonString;
-        let cleanedJsonString = rawJsonString;
+        let cleanedJsonString = cleanJsonString(rawJsonString);
         let parsedData: ExpectedClaudeResponse;
 
         try {
-            const jsonStart = rawJsonString.indexOf('{');
-            const jsonEnd = rawJsonString.lastIndexOf('}');
-
-            if (jsonStart === -1 || jsonEnd === -1 || jsonEnd < jsonStart) {
-                 console.error('Could not find valid JSON object delimiters { } in Claude response. Raw Response:', rawJsonString);
-                throw new Error('Analysis service response did not contain recognizable JSON object delimiters.');
-            }
-            extractedJson = rawJsonString.substring(jsonStart, jsonEnd + 1);
-
-            cleanedJsonString = cleanupJsonString(extractedJson);
-            if (cleanedJsonString !== extractedJson) {
-                console.log("DEBUG: Applied cleanup transformations to JSON string.");
-            }
-
             parsedData = JSON.parse(cleanedJsonString);
             console.log(`Successfully parsed Claude JSON response for ${articleUrl} (after cleanup).`);
 
@@ -478,8 +509,6 @@ Critical JSON Rules & Escaping Guide:
             console.error(`Error parsing Claude JSON response for ${articleUrl}:`, parseError);
             console.error('--- Raw Claude response string ---');
             console.error(rawJsonString);
-            console.error('--- Extracted JSON string (before cleanup) ---');
-            console.error(extractedJson);
             console.error('--- Cleaned JSON string (attempted fix) ---');
             console.error(cleanedJsonString);
             console.error('--- End Logs ---');
@@ -497,20 +526,19 @@ Critical JSON Rules & Escaping Guide:
         const storyData: StoryData = {
             title: parsedData.title || fetchedTitle,
             source: parsedData.source || inferredSource,
-            author: scrapedAuthor, // Author from scraping
-            date: parsedData.date, // Use date parsed/formatted by Claude or scraped
+            author: scrapedAuthor,
+            date: parsedData.date,
             summary: parsedData.summary,
             highlights: Array.isArray(parsedData.highlights) ? parsedData.highlights : [],
-            imageUrl: scrapedImageUrl, // Primary image
-            imageUrls: additionalImageUrls, // List of additional images
-            originalUrl: originalUrl, // Original URL
+            imageUrl: scrapedImageUrl,
+            imageUrls: additionalImageUrls,
+            originalUrl: originalUrl,
             factSections: Array.isArray(parsedData.factSections)
                 ? parsedData.factSections.map(section => ({
                     ...section,
-                    id: generateId(section.title) // Ensure titles are reasonably unique for ID generation
+                    id: generateId(section.title)
                   }))
                 : [],
-            // Extract only necessary SPICE fields for frontend
             spiceScore: parsedData.spiceScore ? {
                 s: parsedData.spiceScore.s,
                 p: parsedData.spiceScore.p,
@@ -518,8 +546,11 @@ Critical JSON Rules & Escaping Guide:
                 c: parsedData.spiceScore.c,
                 e: parsedData.spiceScore.e,
                 total: parsedData.spiceScore.total,
-                // justifications: parsedData.spiceScore.justifications // Optionally pass justifications
             } : null,
+            similarityScore: calculateDiceCoefficient(
+                articleText,
+                parsedData.factSections?.map(section => section.content).join(' ') || ''
+            )
         };
 
         console.log(`DEBUG: Final storyData: Title='${storyData.title}', Author='${storyData.author || 'N/A'}', Date='${storyData.date || 'N/A'}', PrimaryImage='${storyData.imageUrl || 'N/A'}', AdditionalImages=${storyData.imageUrls?.length ?? 0}, Sections=${storyData.factSections.length}, SPICE Score=${storyData.spiceScore?.total ?? 'N/A'}`);
