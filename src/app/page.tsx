@@ -515,6 +515,54 @@ const SmartStorySuite: React.FC = () => {
         </motion.div>      
 
 
+        {/* Loading Animation */}
+        {isLoading && (
+            <motion.div
+                key="loading"
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                className="flex flex-col items-center justify-center min-h-[400px] text-center"
+            >
+                <motion.div
+                    animate={{
+                        rotate: [0, 360],
+                        scale: [1, 1.1, 1],
+                    }}
+                    transition={{
+                        duration: 2,
+                        repeat: Infinity,
+                        ease: "linear"
+                    }}
+                    className="w-16 h-16 mb-4"
+                >
+                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <circle
+                            cx="12"
+                            cy="12"
+                            r="10"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            className={`${isDarkMode ? 'stroke-teal-400' : 'stroke-teal-700'}`}
+                        />
+                        <path
+                            d="M12 2L2 12L12 22L22 12L12 2"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            className={`${isDarkMode ? 'stroke-teal-400' : 'stroke-teal-700'}`}
+                        />
+                    </svg>
+                </motion.div>
+                <h3 className={`text-lg font-semibold mb-2 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                    Analyzing Article...
+                </h3>
+                <p className={`text-sm ${isDarkMode ? 'text-slate-400' : 'text-gray-500'}`}>
+                    This may take a moment. Please wait...
+                </p>
+            </motion.div>
+        )}
+
         {/* --- Story Display Area (Conditional) --- */}
         <AnimatePresence>
          {storyData && !isLoading && (
