@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { posthog } from '@/lib/posthog';
+import NewsVizGraph from '../components/NewsViz'
 
 // --- Interfaces ---
 interface FactSection {
@@ -21,6 +22,24 @@ interface SpiceScoreData {
     total: number;
 }
 
+// Interface for NewsViz story timeline recieved from backend
+interface NewsVizTimeline {
+    title: string;
+    characters: Array<{
+        id: string;
+        name: string;
+        affiliation: string; // the rgb value associated with the character
+        synonyms: string[] | null; // if there are any other names that the character/group goes by
+    }>;
+    scenes: Array<{
+        characters: string[];
+        description: string;
+        title: string;
+        date: string;
+        location: string;
+    }>
+}
+
 interface StoryData {
     title: string;
     source: string;
@@ -34,6 +53,7 @@ interface StoryData {
     originalUrl: string;
     spiceScore: SpiceScoreData | null;
     similarityScore: number;
+    storyTimeline: NewsVizTimeline | null;
 }
 
 // --- Animation Variants ---
@@ -422,28 +442,6 @@ const SmartStorySuite: React.FC = () => {
         autocapture: true,
         rageclick: true
     })
-
-    // // Capturing what text has been highlighted
-    // const handleTextSelect = () => {
-    //     const selection = window.getSelection()
-    //     const selectedText = selection?.toString().trim()
-      
-    //     if (selectedText) {
-    //     console.log("Highlight captured:", selectedText)
-    //       posthog.capture('text_selected', {
-    //         text: selectedText,
-    //         length: selectedText.length
-    //       })
-    //     }
-
-    //     document.addEventListener('mouseup', handleTextSelect)
-    //     document.addEventListener('keyup', handleTextSelect)
-
-    //     return () => {
-    //         document.removeEventListener('mouseup', handleTextSelect)
-    //         document.removeEventListener('keyup', handleTextSelect)
-    //     }
-    // }
   }, [])
 
   return (
@@ -514,7 +512,7 @@ const SmartStorySuite: React.FC = () => {
                     </motion.div>
                  )}
             </AnimatePresence>
-        </motion.div>
+        </motion.div>      
 
 
         {/* --- Story Display Area (Conditional) --- */}
@@ -536,6 +534,12 @@ const SmartStorySuite: React.FC = () => {
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z" /></svg>
                              )}
                         </motion.button>
+
+                        {/* --- NewsLine Visualization ---*/}
+                        {storyData.storyTimeline && <NewsVizGraph 
+                            isDarkMode={isDarkMode} 
+                            storyTimeline={storyData.storyTimeline} 
+                        />}
                     </div>
                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between">
                         <p className={`text-xs sm:text-sm mb-3 sm:mb-0 ${isDarkMode ? 'text-slate-400' : 'text-gray-500'}`}>

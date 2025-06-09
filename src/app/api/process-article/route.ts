@@ -24,7 +24,25 @@ interface SpiceScoreClaudeResponse {
     };
 }
 
-// Define the structure Claude should return (including SPICE)
+// Define the structure for the json required by the News Viz Graph that Claude should return
+interface NewsVizTimeline {
+    title: string;
+    characters: Array<{
+        id: string;
+        name: string;
+        affiliation: string; // the rgb value associated with the character
+        synonyms: string[] | null; // if there are any other names that the character/group goes by
+    }>;
+    scenes: Array<{
+        characters: string[];
+        description: string;
+        title: string;
+        date: string;
+        location: string;
+    }>
+}
+
+// Define the structure Claude should return (including SPICE and the story timeline)
 interface ExpectedClaudeResponse {
     title: string;
     source: string;
@@ -36,6 +54,7 @@ interface ExpectedClaudeResponse {
         content: string; // This will now be chunks of original text
     }>;
     spiceScore: SpiceScoreClaudeResponse | null; // Added SPICE score object
+    storyTimeline: NewsVizTimeline | null; // Added News Viz Timeline object
 }
 
 // Define interfaces for data structure (shared with frontend is ideal)
@@ -69,6 +88,7 @@ interface StoryData {
     originalUrl: string;
     spiceScore: SpiceScoreData | null;
     similarityScore: number; // Add this new field
+    storyTimeline: NewsVizTimeline | null; // Add News Viz Timeline object
 }
 
 // Helper to generate simple IDs
@@ -387,6 +407,28 @@ JSON Structure:
       6.  If the total article text is less than 150 words, create a single 'factSection' containing the entire article text, with an appropriate descriptive title.
       7.  If the article text is extremely short (e.g., less than 20 words) or effectively empty after extraction, you may return an empty array \`[]\` for 'factSections'.
       8.  IMPORTANT: Do not truncate or remove any content from the original article. Every word must be preserved in one of the sections.",
+  "storyTimeline": "(object or null) Refer to the article text to generate an exact timeline of events, using the exact JSON format given below. <<< IMPORTANT: If there is no substantial timeline in the article, return null for this entire 'storyTimeline' field. >>>
+    {
+        "title": (string) The article title,
+        "characters": [
+            {
+            "id": (string) A short unique identifier for the character
+            "name": (string) The name of the character or group
+            "affiliation": "none",
+            "synonyms": (string[] | null) Alternate names for the character that are strictly used in the story. If the character is only referred to under one name,
+            explicity return null.
+            }
+        ],
+        "scenes": [
+            {
+            "characters": (string[]) List of character ids involved in the scene. Any character id MUST BE ALREADY DEFINED in the JSON.
+            "description": (string) A brief narration of exactly what occured in 2-3 sentences. Only use the character FULL UNABBREVIATED names or synonyms already defined in the JSON.
+            "title": (string) Short name for the scene
+            "date": (string | null) The date of the scene in ISO 8601 format (e.g., "2023-11-01"), ONLY if specified in the article. Else, explicity return null.
+            "location": (string) The place where the scene occurs, ONLY if specified in the article. Else, explicity return "Unspecified".
+            }
+        ]
+    }",
   "spiceScore": "(object or null) <<< NEW: Analyze the article text according to the SPICE rubric below and provide the scores. If the article is too short or lacks substance for a meaningful score, return null for this entire 'spiceScore' field. >>>
     {
       "s": (number) Scannability score (1-5),
@@ -542,10 +584,11 @@ Critical JSON Rules & Escaping Guide:
             similarityScore: calculateDiceCoefficient(
                 articleText,
                 parsedData.factSections?.map(section => section.content).join(' ') || ''
-            )
+            ),
+            storyTimeline : parsedData.storyTimeline
         };
 
-        console.log(`DEBUG: Final storyData: Title='${storyData.title}', Author='${storyData.author || 'N/A'}', Date='${storyData.date || 'N/A'}', PrimaryImage='${storyData.imageUrl || 'N/A'}', AdditionalImages=${storyData.imageUrls?.length ?? 0}, Sections=${storyData.factSections.length}, SPICE Score=${storyData.spiceScore?.total ?? 'N/A'}`);
+        console.log(`DEBUG: Final storyData: Title='${storyData.title}', Author='${storyData.author || 'N/A'}', Date='${storyData.date || 'N/A'}', PrimaryImage='${storyData.imageUrl || 'N/A'}', AdditionalImages=${storyData.imageUrls?.length ?? 0}, Sections=${storyData.factSections.length}, SPICE Score=${storyData.spiceScore?.total ?? 'N/A'}, Story Timeline = ${storyData.storyTimeline}`);
         if (storyData.factSections.length > 0) {
             console.log(`DEBUG: Generated Section Titles: ${storyData.factSections.map(s => s.title).join('; ')}`);
         }

@@ -1,0 +1,261 @@
+@layer utilities {
+  @keyframes fadeInModal {
+    from { opacity: 0; transform: scale(0.95); }
+    to { opacity: 1; transform: scale(1); }
+  }
+  @keyframes fadeOutModal {
+    from { opacity: 1; transform: scale(1); }
+    to { opacity: 0; transform: scale(0.95); }
+  }
+
+  .animate-fadeInModal {
+    animation: fadeInModal 0.3s ease-out forwards;
+  }
+  .animate-fadeOutModal {
+    animation: fadeOutModal 0.3s ease-in forwards;
+  }
+}
+
+
+
+text {
+	font-size: 12px;
+}
+
+path {
+	fill: none;
+	stroke-width: 2;
+	stroke: #333;
+}
+
+.intro text:first-child {
+	fill: #fff;
+	stroke: #f9f9f9;
+	stroke-width: 3;
+}
+
+.intro text + text {
+	fill: #333;
+}
+
+.intro text + text.dark {
+	fill: #000;
+}
+
+.intro text + text.light {
+	fill: #df2929;
+}
+
+html,
+body {
+	margin: 0;
+	padding: 0;
+}
+
+* {
+	box-sizing: border-box;
+}
+
+body {
+	height: 100%;
+	width: 100%;
+}
+
+div.layout {
+	height: 100%;
+	width: 100%;
+}
+
+div.flex {
+	display: flex;
+}
+
+div.column {
+	flex-direction: column;
+}
+
+div.main {
+	width: 100%;
+	height: 100%;
+	overflow-y: scroll;
+}
+
+div#viz-and-info {
+	flex-grow: 1;
+	max-height: 100vh;
+	width:100%;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+
+div.visualization {
+	overflow-y: scroll;
+	overflow-x: scroll;
+}
+
+div.characters,
+div.events {
+	display: flex;
+	flex-direction: column;
+	flex-wrap: wrap;
+	flex-grow: 0;
+	flex-shrink: 0;
+	flex-basis: 200px;
+	max-height: 200px;
+	overflow-x: auto;
+}
+
+input.character {
+	display: block;
+}
+
+div.tooltip {
+	position: absolute;
+	text-align: center;
+	max-width: 120px;
+	word-wrap: break-word;
+	padding: 8px;
+	background: white;
+	border: 2px solid #b2b2b2;
+	border-radius: 8px;
+	pointer-events: none;
+	opacity: 0;
+}
+
+p.tooltip-text,
+p.tooltip-date {
+	text-align: start;
+}
+
+div.event-navigation {
+	display: flex;
+	margin-top: 8px;
+}
+
+div.event-navigation *:not(:nth-child(0)) {
+	margin-right: 4px;
+}
+
+.block {
+	display: block;
+}
+
+.character-button,
+.option-button {
+	margin: 8px 0;
+}
+
+div.character-dot {
+	width: 8px;
+	height: 8px;
+	border-radius: 4px;
+	margin-left: 4px;
+}
+
+div.location-dot {
+	width: 12px;
+	height: 12px;
+	border-radius: 6px;
+	margin-left: 4px;
+}
+
+div.character-select {
+	display: flex;
+	align-items: center;
+}
+
+label.timeline-label {
+	display: block;
+	width: 100%;
+}
+
+div.timeline-select {
+	display: flex;
+}
+
+#timeline-select-end {
+	margin-left: 4px;
+}
+
+div.locations-container {
+	padding: 0 8px;
+}
+
+div.location {
+	display: flex;
+	align-items: center;
+}
+
+p.location-name {
+	margin: 0;
+}
+
+div.hide-sidebar-div,
+div.download-pdf-div,
+div.about-button-div {
+	position: fixed;
+	width: 64px;
+	top: 0px;
+	z-index: 3;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.time-range-hover-wrapper {
+  position: relative;
+  display: inline-block;
+}
+
+div.top-right-bar-container {
+  position: relative;
+  width: 100%;
+  height: auto;
+  display: flex;
+  justify-content: flex-end;
+}
+
+div.top-right-bar-options-div {
+	position: absolute;
+	width: 300px;
+	top: 15px;
+	height: 20px;
+	z-index: 3;
+	display: flex;
+	align-items: center;
+	justify-content: right;
+	align-items: flex-end;
+	right:15px;
+}
+
+.time-range-options-div .form-row {
+	flex-direction: column;
+}
+
+.time-range-hover-wrapper:hover .time-range-options-div {
+  	opacity: 1;
+	pointer-events: auto;
+}
+
+.align-center {
+	align-items: center;
+}
+
+#event-title {
+	margin: 8px 0;
+	width: 100%;
+}
+
+#viz-title {
+	text-align: center;
+}
+
+.date-text,
+.scene-node,
+.intro,
+.appearance {
+	cursor: grab;
+}
