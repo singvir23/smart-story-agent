@@ -850,7 +850,7 @@ const SmartStorySuite: React.FC = () => {
                           <div className={`text-center p-6 border-2 border-dashed rounded-lg ${
                             isDarkMode ? 'border-slate-600 text-slate-400' : 'border-gray-300 text-gray-500'
                           }`}>
-                            <p className="text-sm">No sections yet. Click "Add Section" to create one.</p>
+                            <p className="text-sm">No sections yet. Click &quot;Add Section&quot; to create one.</p>
                           </div>
                         )}
                       </div>
