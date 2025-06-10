@@ -279,6 +279,172 @@ const SimilarityScoreDisplay: React.FC<SimilarityScoreDisplayProps> = ({ score, 
     );
 };
 
+// --- Edit Mode Components ---
+interface EditableTitleProps {
+    title: string;
+    onChange: (title: string) => void;
+    isDarkMode: boolean;
+}
+const EditableTitle: React.FC<EditableTitleProps> = ({ title, onChange, isDarkMode }) => (
+    <div className="mb-4">
+        <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-slate-300' : 'text-gray-700'}`}>
+            Article Title
+        </label>
+        <input
+            type="text"
+            value={title}
+            onChange={(e) => onChange(e.target.value)}
+            className={`w-full p-3 text-xl font-bold rounded-md border ${
+                isDarkMode 
+                    ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400' 
+                    : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400'
+            } focus:ring-teal-500 focus:border-teal-500 transition`}
+            placeholder="Enter article title..."
+        />
+    </div>
+);
+
+interface EditableSummaryProps {
+    summary: string;
+    onChange: (summary: string) => void;
+    isDarkMode: boolean;
+}
+const EditableSummary: React.FC<EditableSummaryProps> = ({ summary, onChange, isDarkMode }) => (
+    <div className="mb-4">
+        <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-slate-300' : 'text-gray-700'}`}>
+            Summary
+        </label>
+        <textarea
+            value={summary}
+            onChange={(e) => onChange(e.target.value)}
+            rows={4}
+            className={`w-full p-3 rounded-md border ${
+                isDarkMode 
+                    ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400' 
+                    : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400'
+            } focus:ring-teal-500 focus:border-teal-500 transition resize-vertical`}
+            placeholder="Enter article summary..."
+        />
+    </div>
+);
+
+interface EditableHighlightsProps {
+    highlights: string[];
+    onChange: (highlights: string[]) => void;
+    isDarkMode: boolean;
+}
+const EditableHighlights: React.FC<EditableHighlightsProps> = ({ highlights, onChange, isDarkMode }) => {
+    const addHighlight = () => {
+        onChange([...highlights, '']);
+    };
+
+    const updateHighlight = (index: number, value: string) => {
+        const updated = [...highlights];
+        updated[index] = value;
+        onChange(updated);
+    };
+
+    const removeHighlight = (index: number) => {
+        onChange(highlights.filter((_, i) => i !== index));
+    };
+
+    return (
+        <div className="mb-4">
+            <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-slate-300' : 'text-gray-700'}`}>
+                Story Highlights
+            </label>
+            <div className="space-y-2">
+                {highlights.map((highlight, index) => (
+                    <div key={index} className="flex items-center gap-2">
+                        <input
+                            type="text"
+                            value={highlight}
+                            onChange={(e) => updateHighlight(index, e.target.value)}
+                            className={`flex-1 p-2 text-sm rounded-md border ${
+                                isDarkMode 
+                                    ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400' 
+                                    : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400'
+                            } focus:ring-teal-500 focus:border-teal-500 transition`}
+                            placeholder={`Highlight ${index + 1}...`}
+                        />
+                        <button
+                            type="button"
+                            onClick={() => removeHighlight(index)}
+                            className={`p-2 rounded-md text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition`}
+                            title="Remove highlight"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                        </button>
+                    </div>
+                ))}
+                <button
+                    type="button"
+                    onClick={addHighlight}
+                    className={`flex items-center gap-2 px-3 py-2 text-sm rounded-md border-2 border-dashed transition ${
+                        isDarkMode 
+                            ? 'border-slate-600 text-slate-400 hover:border-slate-500 hover:text-slate-300' 
+                            : 'border-gray-300 text-gray-500 hover:border-gray-400 hover:text-gray-600'
+                    }`}
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                    </svg>
+                    Add Highlight
+                </button>
+            </div>
+        </div>
+    );
+};
+
+interface EditableFactSectionProps {
+    section: FactSection;
+    onChange: (section: FactSection) => void;
+    onRemove: () => void;
+    isDarkMode: boolean;
+}
+const EditableFactSection: React.FC<EditableFactSectionProps> = ({ section, onChange, onRemove, isDarkMode }) => (
+    <motion.div
+        layout
+        className={`rounded-lg p-5 border ${
+            isDarkMode ? 'bg-slate-700 border-slate-600' : 'bg-white border-gray-200'
+        }`}
+    >
+        <div className="flex items-start justify-between mb-3">
+            <input
+                type="text"
+                value={section.title}
+                onChange={(e) => onChange({ ...section, title: e.target.value })}
+                className={`flex-1 text-lg font-semibold bg-transparent border-none outline-none ${
+                    isDarkMode ? 'text-teal-400' : 'text-teal-700'
+                } focus:ring-2 focus:ring-teal-500 rounded px-1`}
+                placeholder="Section title..."
+            />
+            <button
+                type="button"
+                onClick={onRemove}
+                className={`ml-2 p-1 rounded text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition`}
+                title="Remove section"
+            >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+            </button>
+        </div>
+        <textarea
+            value={section.content}
+            onChange={(e) => onChange({ ...section, content: e.target.value })}
+            rows={6}
+            className={`w-full p-3 text-sm rounded-md border ${
+                isDarkMode 
+                    ? 'bg-slate-600 border-slate-500 text-slate-300 placeholder-slate-400' 
+                    : 'bg-gray-50 border-gray-300 text-gray-700 placeholder-gray-400'
+            } focus:ring-teal-500 focus:border-teal-500 transition resize-vertical`}
+            placeholder="Section content..."
+        />
+    </motion.div>
+);
 
 // --- Main Component ---
 const SmartStorySuite: React.FC = () => {
@@ -291,6 +457,8 @@ const SmartStorySuite: React.FC = () => {
   const [isDarkMode, setIsDarkMode] = useState<boolean>(false);
   const [imageLoadError, setImageLoadError] = useState<boolean>(false);
   const [enlargedImageUrl, setEnlargedImageUrl] = useState<string | null>(null);
+  const [isEditMode, setIsEditMode] = useState<boolean>(false);
+  const [editableStoryData, setEditableStoryData] = useState<StoryData | null>(null);
 
   useEffect(() => {
     const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -339,6 +507,8 @@ const SmartStorySuite: React.FC = () => {
       setReadMode('summary');
       setImageLoadError(false);
       setEnlargedImageUrl(null);
+      setIsEditMode(false);
+      setEditableStoryData(null);
 
       try {
            const response = await fetch('/api/process-article', {
@@ -366,7 +536,10 @@ const SmartStorySuite: React.FC = () => {
            console.log('<<< API RESPONSE >>> Additional imageUrls count:', data?.imageUrls?.length ?? 0);
            console.log('<<< API RESPONSE >>> SPICE Score:', data?.spiceScore); // Log SPICE score
 
-           setStoryData(data as StoryData); // Cast to StoryData (now includes spiceScore)
+           const processedData = data as StoryData;
+           setStoryData(processedData);
+           setEditableStoryData(JSON.parse(JSON.stringify(processedData))); // Deep copy for editing
+           setIsEditMode(true); // Enter edit mode after processing
        } catch (err: unknown) {
           console.error("Failed to process article:", err);
           let message = 'An unexpected error occurred. Please try again.';
@@ -391,6 +564,8 @@ const SmartStorySuite: React.FC = () => {
         setActiveSectionId(null);
         setImageLoadError(false);
         setEnlargedImageUrl(null);
+        setIsEditMode(false);
+        setEditableStoryData(null);
    }
 
    useEffect(() => {
@@ -408,6 +583,56 @@ const SmartStorySuite: React.FC = () => {
 
    const closeImageOverlay = () => {
        setEnlargedImageUrl(null);
+   };
+
+   // Edit mode handlers
+   const handleSaveEdits = () => {
+       if (editableStoryData) {
+           setStoryData(editableStoryData);
+           setIsEditMode(false);
+           setActiveSectionId(null);
+           setReadMode('summary');
+       }
+   };
+
+   const handleCancelEdits = () => {
+       setIsEditMode(false);
+       setEditableStoryData(null);
+   };
+
+   const updateEditableData = (updates: Partial<StoryData>) => {
+       if (editableStoryData) {
+           setEditableStoryData({ ...editableStoryData, ...updates });
+       }
+   };
+
+   const updateFactSection = (index: number, updatedSection: FactSection) => {
+       if (editableStoryData) {
+           const updatedSections = [...editableStoryData.factSections];
+           updatedSections[index] = updatedSection;
+           setEditableStoryData({ ...editableStoryData, factSections: updatedSections });
+       }
+   };
+
+   const removeFactSection = (index: number) => {
+       if (editableStoryData) {
+           const updatedSections = editableStoryData.factSections.filter((_, i) => i !== index);
+           setEditableStoryData({ ...editableStoryData, factSections: updatedSections });
+       }
+   };
+
+   const addFactSection = () => {
+       if (editableStoryData) {
+           const newSection: FactSection = {
+               id: `section-${Date.now()}`,
+               title: 'New Section',
+               content: ''
+           };
+           setEditableStoryData({
+               ...editableStoryData,
+               factSections: [...editableStoryData.factSections, newSection]
+           });
+       }
    };
 
 
@@ -525,8 +750,118 @@ const SmartStorySuite: React.FC = () => {
                 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.5 }}
                 className={`rounded-lg shadow-lg overflow-hidden ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200/70'} border`}
             >
-              {/* Header */}
-               <header className={`p-5 sm:p-6 ${isDarkMode ? 'border-b border-slate-700' : 'border-b border-gray-200'}`}>
+              {/* Edit Mode Display */}
+              {isEditMode && editableStoryData ? (
+                <>
+                  {/* Edit Mode Header */}
+                  <header className={`p-5 sm:p-6 ${isDarkMode ? 'border-b border-slate-700 bg-amber-900/20' : 'border-b border-gray-200 bg-amber-50'}`}>
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-3">
+                        <div className={`p-2 rounded-full ${isDarkMode ? 'bg-amber-600' : 'bg-amber-500'}`}>
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                        </div>
+                        <div>
+                          <h1 className={`text-xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                            Edit Mode
+                          </h1>
+                          <p className={`text-sm ${isDarkMode ? 'text-amber-200' : 'text-amber-700'}`}>
+                            Review and edit the processed article before finalizing
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={handleCancelEdits}
+                          className={`px-4 py-2 text-sm font-medium rounded-md transition ${
+                            isDarkMode 
+                              ? 'bg-slate-600 text-white hover:bg-slate-700' 
+                              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                          }`}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={handleSaveEdits}
+                          className={`px-4 py-2 text-sm font-medium text-white rounded-md transition ${
+                            isDarkMode 
+                              ? 'bg-teal-600 hover:bg-teal-700' 
+                              : 'bg-teal-700 hover:bg-teal-800'
+                          }`}
+                        >
+                          Done Editing
+                        </button>
+                      </div>
+                    </div>
+                  </header>
+
+                  {/* Edit Mode Content */}
+                  <div className="p-5 sm:p-6 space-y-6">
+                    <EditableTitle
+                      title={editableStoryData.title}
+                      onChange={(title) => updateEditableData({ title })}
+                      isDarkMode={isDarkMode}
+                    />
+                    
+                    <EditableSummary
+                      summary={editableStoryData.summary}
+                      onChange={(summary) => updateEditableData({ summary })}
+                      isDarkMode={isDarkMode}
+                    />
+                    
+                    <EditableHighlights
+                      highlights={editableStoryData.highlights}
+                      onChange={(highlights) => updateEditableData({ highlights })}
+                      isDarkMode={isDarkMode}
+                    />
+                    
+                    <div>
+                      <div className="flex items-center justify-between mb-4">
+                        <label className={`block text-sm font-medium ${isDarkMode ? 'text-slate-300' : 'text-gray-700'}`}>
+                          Fact Sections
+                        </label>
+                        <button
+                          type="button"
+                          onClick={addFactSection}
+                          className={`flex items-center gap-2 px-3 py-1.5 text-sm rounded-md transition ${
+                            isDarkMode 
+                              ? 'bg-teal-600 text-white hover:bg-teal-700' 
+                              : 'bg-teal-700 text-white hover:bg-teal-800'
+                          }`}
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                          </svg>
+                          Add Section
+                        </button>
+                      </div>
+                      <div className="space-y-4">
+                        {editableStoryData.factSections.map((section, index) => (
+                          <EditableFactSection
+                            key={section.id}
+                            section={section}
+                            onChange={(updatedSection) => updateFactSection(index, updatedSection)}
+                            onRemove={() => removeFactSection(index)}
+                            isDarkMode={isDarkMode}
+                          />
+                        ))}
+                        {editableStoryData.factSections.length === 0 && (
+                          <div className={`text-center p-6 border-2 border-dashed rounded-lg ${
+                            isDarkMode ? 'border-slate-600 text-slate-400' : 'border-gray-300 text-gray-500'
+                          }`}>
+                            <p className="text-sm">No sections yet. Click "Add Section" to create one.</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                                <>
+                  {/* View Mode Display (existing content) */}
+                  {/* Header */}
+                  <header className={`p-5 sm:p-6 ${isDarkMode ? 'border-b border-slate-700' : 'border-b border-gray-200'}`}>
                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4">
                         <h1 className={`text-2xl lg:text-3xl font-bold ${titleFont} leading-tight mb-2 sm:mb-0 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}> {storyData.title} </h1>
                         <motion.button initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2, duration: 0.3 }} onClick={toggleTheme} aria-label="Toggle theme" className={`p-2 rounded-full transition-colors ${isDarkMode ? 'bg-slate-700 hover:bg-slate-600 text-yellow-400' : 'bg-gray-200 hover:bg-gray-300 text-slate-600'}`} >
@@ -721,6 +1056,8 @@ const SmartStorySuite: React.FC = () => {
               <footer className={`p-4 text-center text-xs ${isDarkMode ? 'bg-slate-900 text-slate-500 border-t border-slate-700' : 'bg-gray-50 text-gray-500 border-t border-gray-200'}`}>
                 New View News - Beta
               </footer>
+                </>
+              )}
             </motion.div>
          )}
         </AnimatePresence>
