@@ -57,9 +57,8 @@ const VisualizationView = () => {
 								.style('top', e.pageY + 'px');
 						}
 					})
-					.on('mouseleave', function (_) {
+					.on('mouseleave', function () {
 						const tooltip = d3.select('.tooltip');
-
 						tooltip.transition().duration(500).style('opacity', 0);
 					});
 

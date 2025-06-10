@@ -108,9 +108,9 @@ const svgToPdf = (svgArray) => {
       window.open(blobUrl);
     },
     // readable stream stub iplementation
-    on: (event, action) => {},
-    once: (...args) => {},
-    emit: (...args) => {},
+    on: () => {},
+    once: () => {},
+    emit: () => {},
   });
 
   for (let svg of svgArray) {

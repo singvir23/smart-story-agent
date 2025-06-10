@@ -504,9 +504,11 @@ function Narrative(storyTimeline) {
   // -----
   //
   narrative.changeScenePlacement = function (isProportional) {
-    isProportional && !undefinedDates
-      ? computeSceneTimingProportional()
-      : computeSceneTiming();
+    if (isProportional && !undefinedDates) {
+      computeSceneTimingProportional();
+    } else {
+      computeSceneTiming();
+    }
     computeAppearancePositions();
     computeScenePositions(isProportional);
     createIntroductionNodes();
@@ -637,8 +639,7 @@ function Narrative(storyTimeline) {
         shouldIncludeScene = sceneDate >= startTime && sceneDate <= endTime;
       }
 
-      charsInScene.length > 0 &&
-        shouldIncludeScene &&
+      if (charsInScene.length > 0 && shouldIncludeScene) {
         newScenes.push({
           id,
           title,
@@ -647,6 +648,7 @@ function Narrative(storyTimeline) {
           location,
           characters: charsInScene,
         });
+      }
     });
 
     return newScenes;
@@ -1068,25 +1070,25 @@ function Narrative(storyTimeline) {
   function computeSceneTimingProportional() {
     const startTime = new Date(scenes[0].date);
     const endTime = new Date(scenes[scenes.length - 1].date);
-    const timeRange = Math.abs(endTime - startTime);
+    // const timeRange = Math.abs(endTime - startTime);
 
     const startViz = labelSize[0] + SCENE_WIDTH;
     const endViz = narrative.extent()[0] - SCENE_WIDTH;
-    const vizRange = endViz - startViz;
+    // const vizRange = endViz - startViz;
 
     const k =
       (startViz - endViz) /
       (Math.log10(startTime.getTime()) - Math.log10(endTime.getTime()));
 
-    const c = startViz - k * Math.log10(startTime.getTime());
+    const c = startViz - k *  Math.log10(startTime.getTime());
 
-    let currTime, posTime, posViz;
+    let currTime;
 
     scenes.forEach(function (scene) {
       currTime = new Date(scene.date);
 
-      posTime = ((currTime - startTime) * 100) / timeRange;
-      posViz = (posTime * vizRange) / 100 + startViz;
+      // posTime = ((currTime - startTime) * 100) / timeRange;
+      // posViz = (posTime * vizRange) / 100 + startViz;
 
       scene.start = k * Math.log10(currTime.getTime()) + c;
     });
@@ -1102,42 +1104,42 @@ function Narrative(storyTimeline) {
   //
   // If a scene overlaps with the next, then move all scenes after the scene by a set amount
   // TODO: Only works in an horizontal orientation
-  function checkOverlappingScenes() {
-    // determine what the largest overlap is
-    let maxOverlap = 0;
-    let distBetweenScenes;
-    for (let index = 0; index < scenes.length - 1; index++) {
-      distBetweenScenes = Math.abs(scenes[index + 1].x - scenes[index].x);
-      if (
-        distBetweenScenes < scenes[index].width &&
-        distBetweenScenes > maxOverlap
-      ) {
-        maxOverlap = distBetweenScenes;
-      }
-      // if (distBetweenScenes < scenes[index].width) {
-      // 	moveOverlappingScenes(
-      // 		index + 1,
-      // 		scenes[index].width - distBetweenScenes
-      // 	);
-      // }
-    }
+  // function checkOverlappingScenes() {
+  //   // determine what the largest overlap is
+  //   let maxOverlap = 0;
+  //   let distBetweenScenes;
+  //   for (let index = 0; index < scenes.length - 1; index++) {
+  //     distBetweenScenes = Math.abs(scenes[index + 1].x - scenes[index].x);
+  //     if (
+  //       distBetweenScenes < scenes[index].width &&
+  //       distBetweenScenes > maxOverlap
+  //     ) {
+  //       maxOverlap = distBetweenScenes;
+  //     }
+  //     // if (distBetweenScenes < scenes[index].width) {
+  //     // 	moveOverlappingScenes(
+  //     // 		index + 1,
+  //     // 		scenes[index].width - distBetweenScenes
+  //     // 	);
+  //     // }
+  //   }
 
-    // find the smallest multiplier that removes that overlap
-    const overlapFactor = (maxOverlap + 10) / (SCENE_WIDTH / 2);
-    const multiplier = 1 + overlapFactor;
-    // update the x coordinate of all scenes to reflect the scale
-    scenes.forEach((scene) => (scene.x *= multiplier));
-  }
+  //   // find the smallest multiplier that removes that overlap
+  //   const overlapFactor = (maxOverlap + 10) / (SCENE_WIDTH / 2);
+  //   const multiplier = 1 + overlapFactor;
+  //   // update the x coordinate of all scenes to reflect the scale
+  //   scenes.forEach((scene) => (scene.x *= multiplier));
+  // }
 
   // Move overlaps
   // -------------------
   //
   // Move every scene from the `startIndex` onwards by a fixed amount
-  function moveOverlappingScenes(startIndex, dist) {
-    for (let index = startIndex; index < scenes.length; index++) {
-      scenes[index].x += dist;
-    }
-  }
+  // function moveOverlappingScenes(startIndex, dist) {
+  //   for (let index = startIndex; index < scenes.length; index++) {
+  //     scenes[index].x += dist;
+  //   }
+  // }
 
   // Scene order
   // -------------------
