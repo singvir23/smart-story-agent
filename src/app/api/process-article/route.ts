@@ -4,6 +4,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { JSDOM } from 'jsdom';
 import { Readability } from '@mozilla/readability';
 import fetch from 'node-fetch'; // Or use built-in fetch if your Node version supports it reliably
+import { calculateScannabilityScore } from '@/utils/scannability';
 
 // --- Interfaces ---
 
@@ -165,6 +166,7 @@ export async function POST(req: Request) {
         let scrapedDate: string | null = null;
         let scrapedAuthor: string | null = null;
         let additionalImageUrls: string[] = [];
+        let scannabilityMetrics: ReturnType<typeof calculateScannabilityScore> | null = null;
 
         try {
             const controller = new AbortController();
@@ -285,6 +287,16 @@ export async function POST(req: Request) {
                 }
                 console.log(`Successfully extracted ~${articleText.length} characters via Readability.`);
 
+                // Calculate scannability score using our new algorithm
+                if (article.content) {
+                    scannabilityMetrics = calculateScannabilityScore(article.content);
+                    console.log('Scannability metrics:', scannabilityMetrics);
+                } else {
+                    // Fallback to using the document body if article.content is not available
+                    scannabilityMetrics = calculateScannabilityScore(doc.window.document.body.innerHTML);
+                    console.log('Scannability metrics (fallback):', scannabilityMetrics);
+                }
+
                 // --- Extract Images from Readability Content ---
                 if (article.content) {
                     try {
@@ -354,7 +366,7 @@ export async function POST(req: Request) {
         const maxChars = 150000; // Claude's context window is larger, but keep this for cost/performance if needed
         const truncatedArticleText = articleText.length > maxChars ? articleText.substring(0, maxChars) + "\n[... content truncated ...]" : articleText;
 
-        // *** THIS IS THE MODIFIED PROMPT ***
+        // Modify the prompt to exclude scannability scoring
         const prompt = `Analyze the following article text and provide a structured summary AND a SPICE score IN VALID JSON format ONLY.
 
 Context:
@@ -373,83 +385,29 @@ JSON Structure:
 {
   "title": "(string) The main title of the article. Infer from the text or use '${fetchedTitle}' if accurate.",
   "source": "(string) The source publication or website. Use '${inferredSource}' or refine based *only* on the text.",
-  "date": "(string) The publication date *explicitly mentioned* in the article text (e.g., "April 9, 2025", "last Tuesday"). If found, use that formatted as 'Month Day, Year'. If not explicitly mentioned in the text but a date was scraped ('${scrapedDate || 'None'}'), use the scraped date string provided. Only include a date if it was published in the year 2025. Otherwise, use the string 'Date not specified'.",
-  "summary": "(string) A concise, neutral summary of the article's main points (2-4 sentences maximum).",
-  "highlights": "(array of strings) Exactly 3 key, distinct takeaways or factual highlights directly supported by the article text. If 3 distinct highlights cannot be found, provide as many as possible up to 3. Each highlight should be a concise sentence.",
-  "factSections": "(array of objects) <<< IMPORTANT: Generate this by segmenting the article into EXACT 150-word chunks. >>>
-      1.  Take the entire '--- ARTICLE TEXT START ---' to '--- ARTICLE TEXT END ---' block (referred to as 'the article text' below).
-      2.  Divide the article text into sequential segments, where each segment is EXACTLY 150 words long. Do not truncate or remove any content.
-      3.  For each 150-word segment, create an object in this 'factSections' array.
-      4.  Each object MUST have:
-          -   "title": "(string) A concise, descriptive title for this specific segment of the article. For example, if the segment discusses the project's origin, a title could be 'Project Inception'. If a topic spans multiple segments, use sequential titles like 'Market Analysis - Part 1', 'Market Analysis - Part 2'. The title should reflect the main idea of *that specific segment's text*. Do NOT use generic titles like 'Section 1', 'Chunk 2'.
-          -   "content": "(string) The exact text of this 150-word segment from the article. DO NOT summarize or rephrase this content. Preserve ALL original content including quotes, formatting, and special characters. IMPORTANT: Do not add any escape sequences - use the text exactly as it appears in the article."
-      5.  If the final segment is less than 150 words (but still contains text), include it as its own section with its actual content and an appropriate title.
-      6.  If the total article text is less than 150 words, create a single 'factSection' containing the entire article text, with an appropriate descriptive title.
-      7.  If the article text is extremely short (e.g., less than 20 words) or effectively empty after extraction, you may return an empty array \`[]\` for 'factSections'.
-      8.  IMPORTANT: Do not truncate or remove any content from the original article. Every word must be preserved in one of the sections.",
-  "spiceScore": "(object or null) <<< NEW: Analyze the article text according to the SPICE rubric below and provide the scores. If the article is too short or lacks substance for a meaningful score, return null for this entire 'spiceScore' field. >>>
+  "date": "(string) The publication date *explicitly mentioned* in the article text (e.g., "April 9, 2025", "last Tuesday"). If found, use that formatted as 'Month Day, Year'. If not explicitly mentioned in the text but a date was scraped ('${scrapedDate || 'None'}'), use that. If neither, use 'Not specified'.",
+  "summary": "(string) A concise, factual summary of the article's main points. Keep it under 150 words.",
+  "highlights": "(array of strings) 3-5 key points or takeaways from the article. Each highlight should be a complete sentence.",
+  "factSections": "(array of objects) Break down the article into logical sections. Each section should be an object with:
     {
-      "s": (number) Scannability score (1-5),
-      "p": (number) Personalization score (1-5),
-      "i": (number) Interactivity score (1-5),
-      "c": (number) Curation score (1-5),
-      "e": (number) Emotion score (1-5),
-      "total": (number) Sum of s, p, i, c, e (MUST be between 5 and 25 if not null),
-      "justifications": {
-        "scannability": "(string) Brief justification for the Scannability score.",
-        "personalization": "(string) Brief justification for the Personalization score.",
-        "interactivity": "(string) Brief justification for the Interactivity score.",
-        "curation": "(string) Brief justification for the Curation score.",
-        "emotion": "(string) Brief justification for the Emotion score."
-      }
-    }"
-}
-
---- SPICE Scoring Rubric (Apply to the Article Text) ---
-Assign a score from 1 to 5 for each category (S, P, I, C, E). Start with a base score of 1 for each category and award +1 point for *each distinct feature* present, up to a maximum of 5 points per category. Base your assessment ONLY on the provided article text. Provide brief justification strings.
-
-1.  **Scannability (S):** Award +1 point for each (max 5):
-    *   Contains bullet points or numbered lists (\`<ul>\`, \`<ol>\`, \`<li>\`).
-    *   Has clear, descriptive headings/subheadings (beyond just the main title).
-    *   Uses consistently short paragraphs (mostly 3-4 sentences or less).
-    *   Highlights important keywords/phrases (bold, italic).
-    *   Includes visual breaks (images inferred from context, blockquotes, distinct sections).
-2.  **Personalization (P):** Award +1 point for each (max 5):
-    *   Uses second-person language ("you", "your").
-    *   Directly addresses reader concerns, goals, or motivations.
-    *   Provides examples/scenarios relevant to a specific audience implied by the text.
-    *   Recommends specific actions for the reader.
-    *   Uses a tone/complexity appropriate for a specific (inferred) audience knowledge level.
-3.  **Interactivity (I):** Award +1 point for each (max 5):
-    *   Mentions or implies quizzes, polls, or embedded forms.
-    *   Asks direct questions to the reader within the text.
-    *   Describes clickable elements (buttons, jump links, widgets).
-    *   Mentions comment sections or reader reactions.
-    *   Includes links described as leading to interactive tools, downloads, or resources.
-4.  **Curation (C):** Award +1 point for each (max 5):
-    *   Mentions or implies links to external sources/websites.
-    *   Mentions or implies links to related internal content (from the same source).
-    *   Summarizes insights clearly attributed to other sources within the text.
-    *   Suggests next steps or further readings.
-    *   Cites or references authoritative sources/experts by name or title.
-5.  **Emotion (E):** Award +1 point for each (max 5):
-    *   Uses emotionally charged or empathetic language.
-    *   Features relatable or compelling storytelling/narrative elements.
-    *   Addresses common reader frustrations, hopes, or fears.
-    *   Includes humor, inspiration, or surprise elements.
-    *   Uses emotionally evocative imagery or metaphors in the language.
-
-Calculate the 'total' score as the sum of the individual S, P, I, C, E scores (should be between 5 and 25). Provide all scores as numbers. Provide justifications as concise strings.
-
---- End SPICE Rubric ---
-
-Critical JSON Rules & Escaping Guide:
-1.  **OUTPUT JSON ONLY:** Start with '{', end with '}', nothing else.
-2.  **VALID SYNTAX:** Use double quotes for all keys and string values. Correct commas (no trailing commas). Match brackets/braces.
-3.  **MANDATORY ESCAPING inside STRING values:** Double Quote (") -> \\\\", Backslash (\\\\) -> \\\\\\\\, Newline -> \\\\n, etc.
-4.  **DO NOT ESCAPE:** Single quotes ('). Leave them as is.
-5.  **STICK TO STRUCTURE:** Use the exact field names and types specified.
-6.  **BASE ON TEXT ONLY:** Do not add external information. Follow instructions for missing data. If SPICE scoring is not feasible, return null for 'spiceScore'.`;
+      "title": "(string) A descriptive title for this section",
+      "content": "(string) The actual text content of this section. Keep each section under 150 words. If a section would exceed 150 words, split it into multiple sections."
+    }
+    IMPORTANT: Use the original text from the article for the content. Do not paraphrase or summarize. Just copy the relevant text and split it into sections.",
+  "spiceScore": {
+    "p": (number) Personalization score (1-5),
+    "i": (number) Interactivity score (1-5),
+    "c": (number) Curation score (1-5),
+    "e": (number) Emotion score (1-5),
+    "total": (number) Sum of p, i, c, e (MUST be between 4 and 20 if not null),
+    "justifications": {
+      "personalization": "(string) Brief justification for the Personalization score.",
+      "interactivity": "(string) Brief justification for the Interactivity score.",
+      "curation": "(string) Brief justification for the Curation score.",
+      "emotion": "(string) Brief justification for the Emotion score."
+    }
+  }
+}`;
         // *** END OF MODIFIED PROMPT ***
 
 
@@ -481,7 +439,6 @@ Critical JSON Rules & Escaping Guide:
             // Basic validation for SPICE score structure if present
             if (parsedData.spiceScore) {
                 if (typeof parsedData.spiceScore.total !== 'number' ||
-                    typeof parsedData.spiceScore.s !== 'number' ||
                     typeof parsedData.spiceScore.p !== 'number' ||
                     typeof parsedData.spiceScore.i !== 'number' ||
                     typeof parsedData.spiceScore.c !== 'number' ||
@@ -490,7 +447,7 @@ Critical JSON Rules & Escaping Guide:
                    console.warn(`DEBUG: SPICE score structure seems invalid or incomplete in response for ${articleUrl}. Setting spiceScore to null.`);
                    parsedData.spiceScore = null;
                 } else {
-                   console.log(`DEBUG: Parsed SPICE score: Total=${parsedData.spiceScore.total}, S=${parsedData.spiceScore.s}, P=${parsedData.spiceScore.p}, I=${parsedData.spiceScore.i}, C=${parsedData.spiceScore.c}, E=${parsedData.spiceScore.e}`);
+                   console.log(`DEBUG: Parsed SPICE score: Total=${parsedData.spiceScore.total}, P=${parsedData.spiceScore.p}, I=${parsedData.spiceScore.i}, C=${parsedData.spiceScore.c}, E=${parsedData.spiceScore.e}`);
                 }
             } else {
                 console.log(`DEBUG: SPICE score not present or explicitly null in response for ${articleUrl}.`);
@@ -531,13 +488,13 @@ Critical JSON Rules & Escaping Guide:
                     id: generateId(section.title)
                   }))
                 : [],
-            spiceScore: parsedData.spiceScore ? {
-                s: parsedData.spiceScore.s,
+            spiceScore: parsedData.spiceScore && scannabilityMetrics ? {
+                s: scannabilityMetrics.totalScore, // Use our calculated scannability score
                 p: parsedData.spiceScore.p,
                 i: parsedData.spiceScore.i,
                 c: parsedData.spiceScore.c,
                 e: parsedData.spiceScore.e,
-                total: parsedData.spiceScore.total,
+                total: scannabilityMetrics.totalScore + parsedData.spiceScore.p + parsedData.spiceScore.i + parsedData.spiceScore.c + parsedData.spiceScore.e,
             } : null,
             similarityScore: calculateDiceCoefficient(
                 articleText,
