@@ -42,8 +42,6 @@ export function calculateScannabilityScore(htmlContent: string): ScannabilityMet
         (headerCount / (MIN_HEADERS_PER_1000_WORDS * wordsPer1000)) * MAX_SCORE
     );
 
-    // Calculate list score
-    const lists = document.querySelectorAll('ul, ol');
     const listItems = document.querySelectorAll('li');
     const listScore = Math.min(
         MAX_SCORE,
