@@ -542,11 +542,9 @@ const EditableVideoSection: React.FC<EditableVideoSectionProps> = ({ videos, onC
     const addVideoURL = () => {
         const videoEmbeddingURL = getEmbedUrl(newURL);
         if (videoEmbeddingURL) {
-            console.log(videoEmbeddingURL);
             onChange([...(videos ?? []), videoEmbeddingURL]);
             setNewURL('');
         }
-        console.log("On adding:", videos)
         setIsAdding(false);
     };
 
@@ -836,7 +834,6 @@ const SmartStorySuite: React.FC = () => {
    };
 
    const updateVideoSection = (videos: string[]) => {
-        console.log("Here", videos);
        if (editableStoryData) {
            setEditableStoryData({ 
                 ...editableStoryData, 
