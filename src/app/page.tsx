@@ -34,6 +34,7 @@ interface StoryData {
     originalUrl: string;
     spiceScore: SpiceScoreData | null;
     similarityScore: number;
+    videos: string[];
 }
 
 // --- Animation Variants ---
@@ -217,6 +218,65 @@ const ImageOverlay: React.FC<ImageOverlayProps> = ({ imageUrl, onClose }) => {
     </motion.div>
   );
 };
+
+// --- Component: Video Carousel ---
+interface VideoCarouselProps {
+  videos: string[];
+  isDarkMode: boolean;
+}
+const VideoCarousel: React.FC<VideoCarouselProps> = ({ videos, isDarkMode }) => {
+  const [currentIndex, setCurrentIndex] = useState<number>(0);
+
+  const slantStyle = (side: 'left' | 'right') => ({
+    clipPath:
+      side === 'left'
+        ? 'polygon(10% 0%, 100% 0%, 100% 100%, 0% 100%)'
+        : 'polygon(0% 0%, 100% 0%, 90% 100%, 0% 100%)',
+  });
+
+
+  return (
+    <div className="relative max-w-xl mx-auto space-y-2">
+      <div className="aspect-video w-full overflow-hidden rounded-md">
+        <iframe
+          src={videos[currentIndex]}
+          allow="autoplay; fullscreen"
+          allowFullScreen
+          className="w-full h-full"
+        />
+      </div>
+
+      {videos.length > 1 && <div className="flex justify-between items-center gap-1 mt-2">
+        {videos.map((_, index) => {
+          const isFirst = index === 0;
+          const isLast = index === videos.length - 1;
+          return (
+            <button
+              key={`${index}`}
+              onClick={() => setCurrentIndex(index)}
+              style={{
+                ...(isFirst ? slantStyle('left') : {}),
+                ...(isLast ? slantStyle('right') : {}),
+              }}
+              className={`h-2 flex-1 transition-all duration-200 ${
+                index === currentIndex ? 
+                        (`${isDarkMode
+                        ? 'bg-teal-700 hover:bg-teal-600'
+                        : 'bg-teal-600 hover:bg-teal-700'}`) 
+                    : 
+                        (`${isDarkMode
+                        ? 'bg-slate-600 hover:bg-slate-500'
+                        : 'bg-gray-200 hover:bg-gray-300'}`)
+              }`}
+              title={`Video ${index + 1}`}
+            />
+          );
+        })}
+      </div>}
+    </div>
+  );
+};
+
 
 // --- Component: SPICE Score Display ---
 interface SpiceScoreDisplayProps {
@@ -446,6 +506,145 @@ const EditableFactSection: React.FC<EditableFactSectionProps> = ({ section, onCh
     </motion.div>
 );
 
+interface EditableVideoSectionProps {
+    videos: string[];
+    onChange: (videos: string[]) => void;
+    isDarkMode: boolean;
+}
+const EditableVideoSection: React.FC<EditableVideoSectionProps> = ({ videos, onChange, isDarkMode }) => {
+    const [newURL, setNewURL] = useState('');
+    const [isAdding, setIsAdding] = useState(false);
+
+    function getEmbedUrl(rawUrl: string): string | null {
+        try {
+            const url = new URL(rawUrl);
+            if (url.hostname.includes('youtube.com')) {
+                const videoId = url.searchParams.get('v');
+                if (!videoId) return null;
+                return `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1&loop=1&playlist=${videoId}`;
+            }
+
+            if (url.hostname === 'youtu.be') {
+                const videoId = url.pathname.slice(1);
+                return `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1&loop=1&playlist=${videoId}`;
+            }
+
+            if (url.hostname.includes('vimeo.com')) {
+                const videoId = url.pathname.split('/').filter(Boolean).pop();
+                return `https://player.vimeo.com/video/${videoId}?autoplay=1&muted=1&loop=1`;
+            }
+            return rawUrl;
+        } catch {
+            return null;
+        }
+    }
+
+    const addVideoURL = () => {
+        const videoEmbeddingURL = getEmbedUrl(newURL);
+        if (videoEmbeddingURL) {
+            console.log(videoEmbeddingURL);
+            onChange([...(videos ?? []), videoEmbeddingURL]);
+            setNewURL('');
+        }
+        console.log("On adding:", videos)
+        setIsAdding(false);
+    };
+
+    const removeVideo = (index: number) => {
+        onChange(videos.filter((_, i) => i !== index));
+    };
+
+    return (
+        <div className="mb-6">
+            <div className="flex items-center justify-between">
+                <label className={`block text-sm font-medium ${isDarkMode ? 'text-slate-300' : 'text-gray-700'}`}>
+                    Videos
+                </label>
+                <button
+                    type="button"
+                    onClick={() => {setIsAdding(true);}}
+                    className={`flex items-center gap-2 px-3 py-1.5 text-sm rounded-md transition ${
+                    isDarkMode 
+                        ? 'bg-teal-600 text-white hover:bg-teal-700' 
+                        : 'bg-teal-700 text-white hover:bg-teal-800'
+                    }`}
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                    </svg>
+                    Add Videos
+                </button>
+            </div>
+            {isAdding && 
+            <div className="flex justify-center h-[30px] gap-x-2 mt-4">
+                <input
+                    type="url"
+                    placeholder="Paste video URL (YouTube, Vimeo, etc)"
+                    value={newURL}
+                    onChange={(e) => {setNewURL(e.target.value);}}
+                    className={`w-[80%] p-2 text-sm rounded-md border ${
+                        isDarkMode
+                        ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400'
+                        : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400'
+                    }`}
+                />
+                <button
+                    type="button"
+                    onClick={addVideoURL}
+                    className={`flex items-center gap-2 px-1.5 py-1.5 text-sm rounded-md transition ${
+                    isDarkMode 
+                        ? 'bg-teal-600 text-white hover:bg-teal-700' 
+                        : 'bg-teal-700 text-white hover:bg-teal-800'
+                    }`}
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" className="h-4 w-4">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                    </svg>
+                </button>
+            </div>
+            }
+            {(!videos || (videos && videos.length === 0)) && !isAdding && (
+                <div className={`text-center mt-2 p-2 border-2 border-dashed rounded-lg ${
+                isDarkMode ? 'border-slate-600 text-slate-400' : 'border-gray-300 text-gray-500'
+                }`}>
+                <p className="text-sm">No videos yet. Click &quot;Add Videos&quot; to embed one.</p>
+                </div>
+            )}
+            {videos && videos.length > 0 && (
+                <div>
+                    <div className="flex gap-2 mb-3">
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {videos.map((video, index) => (
+                        <div
+                            key={index}
+                            className="relative rounded-md w-full pt-[56.25%] overflow-hidden"
+                        >
+                        <iframe
+                            src={video}
+                            allow="autoplay"
+                            allowFullScreen
+                            className="absolute top-0 left-0 w-full h-full"
+                        />
+                        <button
+                            type="button"
+                            onClick={() => removeVideo(index)}
+                            className="absolute top-2 right-2 p-2 rounded-md text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition"
+                            title="Remove video"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                        </button>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        )}
+    </div>
+    );
+};
+
 // --- Main Component ---
 const SmartStorySuite: React.FC = () => {
   const [urlInput, setUrlInput] = useState<string>('');
@@ -537,6 +736,7 @@ const SmartStorySuite: React.FC = () => {
            console.log('<<< API RESPONSE >>> SPICE Score:', data?.spiceScore); // Log SPICE score
 
            const processedData = data as StoryData;
+           processedData.videos = processedData?.videos ?? [];
            setStoryData(processedData);
            setEditableStoryData(JSON.parse(JSON.stringify(processedData))); // Deep copy for editing
            setIsEditMode(true); // Enter edit mode after processing
@@ -635,6 +835,15 @@ const SmartStorySuite: React.FC = () => {
        }
    };
 
+   const updateVideoSection = (videos: string[]) => {
+        console.log("Here", videos);
+       if (editableStoryData) {
+           setEditableStoryData({ 
+                ...editableStoryData, 
+                videos
+           });
+       }
+   };
 
   const bodyFont = 'font-sans';
   const titleFont = 'font-serif';
@@ -740,7 +949,6 @@ const SmartStorySuite: React.FC = () => {
                  )}
             </AnimatePresence>
         </motion.div>
-
 
         {/* --- Story Display Area (Conditional) --- */}
         <AnimatePresence>
@@ -853,6 +1061,15 @@ const SmartStorySuite: React.FC = () => {
                             <p className="text-sm">No sections yet. Click &quot;Add Section&quot; to create one.</p>
                           </div>
                         )}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="space-y-4">
+                        <EditableVideoSection
+                            videos={editableStoryData.videos}
+                            onChange={(videos) => {updateVideoSection(videos)}}
+                            isDarkMode={isDarkMode}
+                        />
                       </div>
                     </div>
                   </div>
@@ -1046,6 +1263,20 @@ const SmartStorySuite: React.FC = () => {
                            </motion.div>
                         )}
                         {/* --- END: Additional Images Display --- */}
+
+                        {/* --- Videos Display --- */}
+                        {storyData.videos && storyData.videos.length > 0 &&
+                        <div>
+                            <h4 className={`text-xs font-semibold mb-1.5 uppercase tracking-wider ${isDarkMode ? 'text-teal-400' : 'text-teal-600'}`}>
+                                Videos
+                            </h4>
+                            <VideoCarousel 
+                                videos={storyData.videos} 
+                                isDarkMode={isDarkMode}
+                            />
+                        </div>
+                        }
+                        {/* --- END: Videos Display --- */}
 
                      </div>
                  </motion.aside>
