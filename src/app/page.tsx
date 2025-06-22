@@ -340,6 +340,119 @@ const SimilarityScoreDisplay: React.FC<SimilarityScoreDisplayProps> = ({ score, 
 };
 
 // --- Edit Mode Components ---
+interface EditablePicturesProps {
+    imageUrls: string[];
+    isDarkMode: boolean;
+    onChange: (urls: string[]) => void;
+    onImageClick: (imageUrl: string) => void;
+}
+
+const EditablePictures: React.FC<EditablePicturesProps> = ({ imageUrls, isDarkMode, onChange, onImageClick }) => {
+    const [newImageUrl, setNewImageUrl] = useState('');
+    const [isAdding, setIsAdding] = useState(false);
+    const [urlError, setUrlError] = useState<string>('');
+
+    const handleAddImage = () => {
+        if (newImageUrl.trim()) {
+            onChange([...imageUrls, newImageUrl.trim()]);
+            setNewImageUrl('');
+            setIsAdding(false);
+        }
+    };
+
+    const handleRemoveImage = (urlToRemove: string) => {
+        onChange(imageUrls.filter(url => url !== urlToRemove));
+    };
+
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            handleAddImage();
+        }
+    };
+
+    return (
+        <div className="mb-6">
+            <div className="flex justify-between items-center mb-4">
+                <h3 className="text-xl font-bold">Pictures</h3>
+                <button
+                    onClick={() => setIsAdding(true)}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
+                >
+                    Add Image
+                </button>
+            </div>
+
+            {isAdding && (
+                <div className="mb-4">
+                    <div className="space-y-2">
+                        <input
+                            type="text"
+                            value={newImageUrl}
+                            onChange={(e) => {
+                                setNewImageUrl(e.target.value);
+                                setUrlError('');
+                            }}
+                            onKeyDown={handleKeyDown}
+                            placeholder="Enter image URL..."
+                            className={`w-full px-4 py-2 rounded-md border ${
+                                urlError ? 'border-red-500' : isDarkMode ? 'border-gray-700 bg-gray-800 text-white' : 'border-gray-300'
+                            } focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                        />
+                        {urlError && (
+                            <p className={`text-sm ${isDarkMode ? 'text-red-400' : 'text-red-500'}`}>{urlError}</p>
+                        )}
+                        <div className="flex justify-end space-x-2 mt-2">
+                            <button
+                                onClick={() => {
+                                    setIsAdding(false);
+                                    setUrlError('');
+                                }}
+                                className={`px-4 py-2 rounded-md ${
+                                    isDarkMode ? 'bg-gray-700 text-white' : 'bg-gray-200'
+                                } hover:bg-gray-300 dark:hover:bg-gray-600`}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleAddImage}
+                                className={`px-4 py-2 rounded-md bg-blue-500 text-white hover:bg-blue-600 ${
+                                    urlError || !newImageUrl.trim() ? 'opacity-50 cursor-not-allowed' : ''
+                                }`}
+                                disabled={!!urlError || !newImageUrl.trim()}
+                            >
+                                Add
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                {imageUrls.map((imageUrl, index) => (
+                    <div key={index} className="relative group">
+                        <AdditionalImage
+                            src={imageUrl}
+                            alt={`Image ${index + 1}`}
+                            isDarkMode={isDarkMode}
+                            onClick={() => onImageClick(imageUrl)}
+                        />
+                        <button
+                            onClick={() => handleRemoveImage(imageUrl)}
+                            className={`absolute top-2 right-2 p-1 rounded-full bg-white dark:bg-gray-900 text-red-500 hover:bg-red-100 dark:hover:bg-red-900 transition-colors group-hover:opacity-100 opacity-0`}
+                        >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
+// --- Edit Mode Components ---
 interface EditableTitleProps {
     title: string;
     onChange: (title: string) => void;
@@ -1008,6 +1121,23 @@ const SmartStorySuite: React.FC = () => {
                       onChange={(title) => updateEditableData({ title })}
                       isDarkMode={isDarkMode}
                     />
+                    
+                    {/* Pictures section */}
+            {isEditMode && editableStoryData && (
+                <EditablePictures
+                    imageUrls={editableStoryData.imageUrls || []}
+                    isDarkMode={isDarkMode}
+                    onImageClick={handleImageClick}
+                    onChange={(newUrls) => {
+                        if (editableStoryData) {
+                            setEditableStoryData({
+                                ...editableStoryData,
+                                imageUrls: newUrls
+                            });
+                        }
+                    }}
+                />
+            )}
                     
                     <EditableSummary
                       summary={editableStoryData.summary}
