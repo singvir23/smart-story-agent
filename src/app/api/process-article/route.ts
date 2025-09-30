@@ -91,23 +91,14 @@ function getAnthropicClient() {
     return new Anthropic({ apiKey });
 }
 
-// Add this helper function at the top level
-function cleanJsonString(str: string): string {
-    // First, try to parse and stringify to normalize the JSON
-    try {
-        const parsed = JSON.parse(str);
-        return JSON.stringify(parsed);
-    } catch {
-        // If parsing fails, try to clean up common escape sequence issues
-        return str
-            .replace(/\\\\/g, '\\')  // Fix double backslashes
-            .replace(/\\"/g, '"')    // Fix escaped quotes
-            .replace(/\\n/g, '\n')   // Fix newlines
-            .replace(/\\t/g, '\t')   // Fix tabs
-            .replace(/\\r/g, '\r')   // Fix carriage returns
-            .replace(/\\f/g, '\f')   // Fix form feeds
-            .replace(/\\b/g, '\b');  // Fix backspaces
+// Helper function to extract JSON from Claude's response
+function extractJson(str: string): string {
+    // Remove markdown code blocks if present
+    const jsonMatch = str.match(/```(?:json)?\s*(\{[\s\S]*\})\s*```/);
+    if (jsonMatch) {
+        return jsonMatch[1].trim();
     }
+    return str.trim();
 }
 
 // Add this helper function for Dice coefficient calculation
@@ -382,7 +373,7 @@ JSON Structure:
       3.  For each 150-word segment, create an object in this 'factSections' array.
       4.  Each object MUST have:
           -   "title": "(string) A concise, descriptive title for this specific segment of the article. For example, if the segment discusses the project's origin, a title could be 'Project Inception'. If a topic spans multiple segments, use sequential titles like 'Market Analysis - Part 1', 'Market Analysis - Part 2'. The title should reflect the main idea of *that specific segment's text*. Do NOT use generic titles like 'Section 1', 'Chunk 2'.
-          -   "content": "(string) The exact text of this 150-word segment from the article. DO NOT summarize or rephrase this content. Preserve ALL original content including quotes, formatting, and special characters. IMPORTANT: Do not add any escape sequences - use the text exactly as it appears in the article."
+          -   "content": "(string) The exact text of this 150-word segment from the article. DO NOT summarize or rephrase this content. Preserve ALL original content including quotes, formatting, and special characters."
       5.  If the final segment is less than 150 words (but still contains text), include it as its own section with its actual content and an appropriate title.
       6.  If the total article text is less than 150 words, create a single 'factSection' containing the entire article text, with an appropriate descriptive title.
       7.  If the article text is extremely short (e.g., less than 20 words) or effectively empty after extraction, you may return an empty array \`[]\` for 'factSections'.
@@ -471,12 +462,12 @@ Critical JSON Rules & Escaping Guide:
         }
         const rawJsonString = claudeResponse.content[0].text.trim();
 
-        const cleanedJsonString = cleanJsonString(rawJsonString);
+        const extractedJsonString = extractJson(rawJsonString);
         let parsedData: ExpectedClaudeResponse;
 
         try {
-            parsedData = JSON.parse(cleanedJsonString);
-            console.log(`Successfully parsed Claude JSON response for ${articleUrl} (after cleanup).`);
+            parsedData = JSON.parse(extractedJsonString);
+            console.log(`Successfully parsed Claude JSON response for ${articleUrl}.`);
 
             // Basic validation for SPICE score structure if present
             if (parsedData.spiceScore) {
@@ -501,8 +492,8 @@ Critical JSON Rules & Escaping Guide:
             console.error(`Error parsing Claude JSON response for ${articleUrl}:`, parseError);
             console.error('--- Raw Claude response string ---');
             console.error(rawJsonString);
-            console.error('--- Cleaned JSON string (attempted fix) ---');
-            console.error(cleanedJsonString);
+            console.error('--- Extracted JSON string ---');
+            console.error(extractedJsonString);
             console.error('--- End Logs ---');
 
             let errorMessage = 'Failed to process the analysis service response (JSON parse error).';
